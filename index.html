@@ -113,6 +113,9 @@ textarea.editor{width:100%; min-height:190px; background:var(--code-bg); color:v
 .nullv{color:var(--red); font-style:italic}
 .schemaline{font-size:13.5px; color:var(--muted); padding:3px 0; font-family:ui-monospace,Menlo,monospace}
 .editor.sql{min-height:170px}
+button.chip{font-family:inherit; border:0}
+.chip.nav{cursor:pointer}
+.chip.nav:hover{filter:brightness(.95)}
 
 </style>
 <link rel="manifest" href="manifest.webmanifest">
@@ -3146,11 +3149,22 @@ function openLesson(coll, id, stage){
        placed: [], scrambled: scramble(L.parsons.lines),
        buildCode: null, buildResult: null, buildFails: 0, showHint: false, showSolution: false,
        solutionSeen: false, studyMode: false, parsonsFails: 0, coldCleared: false, orders: {},
+       stash: {}, showData: false, maxStageIdx: 0,
        shapeDone: !L.build.shapeQ, shapeMsg: '', shapeGood: false,
        needVerdict: false, verdictDone: !L.build.verdictQ, verdictMsg: '', verdictGood: false,
        xpAtStart: state.xp.drills + state.xp.sql + state.xp.fundamentals + state.xp.rapid,
        startedAt: Date.now()};
+  S.maxStageIdx = Math.max(furthestIdx(coll, id), STAGES.indexOf(S.stage));
   render(); window.scrollTo(0, 0);
+}
+function furthestIdx(coll, id){
+  var reached = 0;
+  for (var i = 0; i < EXERCISES.length; i++){ if (exDone(coll, id, EXERCISES[i])) reached = i + 1; else break; }
+  return reached;
+}
+function stashStage(){
+  if (!S.stash) S.stash = {};
+  if (STAGES.indexOf(S.stage) >= 0) S.stash[S.stage] = {selected: S.selected, checked: S.checked, wasCorrect: S.wasCorrect, stepIdx: S.stepIdx, placed: S.placed};
 }
 function firstOpenStage(coll, id){
   for (var i = 0; i < EXERCISES.length; i++) if (!exDone(coll, id, EXERCISES[i])) return EXERCISES[i] === 'predict' ? 'teach' : EXERCISES[i];
@@ -3264,10 +3278,15 @@ function viewHome(){
 }
 function stageChips(coll, L){
   var labels = {teach: 'Learn', predict: 'Predict', step: 'Step thru', parsons: 'Rebuild', build: 'Build'};
-  return '<div class="stagechips">' + STAGES.map(function(st){
-    var cls = st === S.stage ? 'now' : (st === 'teach' ? (S.stage !== 'teach' ? 'done' : '') : (exDone(coll, L.id, st) ? 'done' : ''));
+  var cur = STAGES.indexOf(S.stage);
+  var h = '<div class="stagechips">' + STAGES.map(function(st, i){
+    var cls = st === S.stage ? 'now' : ((exDone(coll, L.id, st) || (st === 'teach' && cur > 0) || i < cur) ? 'done' : '');
+    if (i <= (S.maxStageIdx || 0) && st !== S.stage)
+      return '<button class="chip nav ' + cls + '" onclick="H.gotoStage(\'' + st + '\')">' + (i < cur ? '‹ ' : '') + labels[st] + '</button>';
     return '<div class="chip ' + cls + '">' + labels[st] + '</div>';
   }).join('') + '</div>';
+  if ((S.maxStageIdx || 0) > 0 && S.stage !== 'done') h += '<div class="note" style="margin-top:6px">Tap a stage above to jump back — your place is kept.</div>';
+  return h;
 }
 function codeBlock(code, highlightLine){
   if (!highlightLine) return '<pre class="code">' + escHtml(code) + '</pre>';
@@ -3353,6 +3372,15 @@ function sqlDivergence(res, chk){
     text: 'The right rows, in the wrong order.',
     question: 'Membership is right; presentation is wrong. What does your ORDER BY sort by — and does it need a tie-break to be deterministic?'};
 }
+function dataPeekHtml(){
+  var h = '<button class="btn secondary" style="margin-top:10px" onclick="H.toggleData()">' + (S.showData ? '🙈 Hide the data' : '📊 See the data') + '</button>';
+  if (S.showData){
+    h += Object.keys(SQL_DB).map(function(t){
+      return '<div class="area-label" style="margin-top:10px">' + escHtml(t) + '</div>' + sqlTableHtml(Object.keys(SQL_DB[t][0]), SQL_DB[t], 12);
+    }).join('');
+  }
+  return h;
+}
 function viewTeachSQL(L){
   var h = '<div class="card">';
   L.teach.body.split('\n\n').forEach(function(p){ h += '<p>' + escHtml(p) + '</p>'; });
@@ -3361,7 +3389,7 @@ function viewTeachSQL(L){
   h += '<div class="code-label">Example query</div>' + codeBlock(L.teach.query);
   var res = SQL_ENGINE.runSQL(L.teach.query, SQL_DB);
   if (res.ok) h += '<div class="area-label">Its result</div>' + sqlTableHtml(res.cols, res.rows, 12);
-  h += '<div class="note">' + escHtml(L.teach.note) + '</div>';
+  h += '<div class="note">' + escHtml(L.teach.note) + '</div>' + dataPeekHtml();
   h += nextStageBtn('Start: Predict →', 'predict');
   return h + '</div>';
 }
@@ -3399,7 +3427,7 @@ function viewBuildSQL(L){
   var h = '<div class="card"><h3 style="margin-top:0">⌨️ Build it</h3>';
   if (b.shapeQ && S.shapeMsg) h += '<div class="feedback good" style="margin:0 0 12px">🔎 ' + escHtml(S.shapeMsg) + '</div>';
   if (S.solutionSeen) h += '<div class="feedback" style="margin:0 0 12px;border-color:var(--amber)">📖 You studied the solution — this pass is the rebuild. It counts when it\u2019s written by you, and this lesson comes back cold tomorrow.</div>';
-  h += '<p>' + escHtml(b.prompt) + '</p>' + sqlSchemaHtml() +
+  h += '<p>' + escHtml(b.prompt) + '</p>' + sqlSchemaHtml() + dataPeekHtml() +
     '<textarea class="editor sql" id="editor" spellcheck="false" autocapitalize="off" autocomplete="off">' + escHtml(S.buildCode === null ? b.starter : S.buildCode) + '</textarea>';
   h += '<div class="btnrow"><button class="btn" onclick="H.runBuild()">▶ Run & check</button>' +
     '<button class="btn secondary" onclick="H.toggleHint()">' + (S.showHint ? 'Hide hint' : '💡 Hint') + '</button></div>';
@@ -3453,6 +3481,7 @@ function viewPredict(L){
     if (S.wasCorrect) h += nextStageBtn('Next: Step through →', 'step');
     else h += '<button class="btn secondary" onclick="H.retryChoice()">Try again</button>';
   }
+  if (L.sql) h += dataPeekHtml();
   return h + '</div>';
 }
 function viewStep(L){
@@ -3661,11 +3690,27 @@ window.H = {
     render(); window.scrollTo(0, 0);
   },
   toStage: function(stage){
+    stashStage();
     if (stage === 'build' && S.buildCode === null){
       var L = lessonById(S.coll, S.conceptId); S.buildCode = L.build.starter;
     }
     S.stage = stage; S.selected = -1; S.checked = false; S.wasCorrect = false;
+    var idx = STAGES.indexOf(stage); if (idx > (S.maxStageIdx || 0)) S.maxStageIdx = idx;
     render(); window.scrollTo(0, 0);
+  },
+  gotoStage: function(stage){
+    var idx = STAGES.indexOf(stage);
+    if (idx < 0 || idx > (S.maxStageIdx || 0) || stage === S.stage) return;
+    stashStage();
+    S.stage = stage;
+    var st = (S.stash || {})[stage];
+    S.selected = st ? st.selected : -1; S.checked = st ? st.checked : false; S.wasCorrect = st ? st.wasCorrect : false;
+    S.stepIdx = st ? st.stepIdx : 0; S.placed = st ? st.placed : [];
+    render(); window.scrollTo(0, 0);
+  },
+  toggleData: function(){
+    var ta = document.getElementById('editor'); if (ta) S.buildCode = ta.value;
+    S.showData = !S.showData; render();
   },
   pick: function(i){ if (!S.checked){ S.selected = i; render(); } },
   retryChoice: function(){ S.checked = false; S.selected = -1; render(); },
