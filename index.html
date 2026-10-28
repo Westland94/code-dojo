@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Code Dojo — Learn Python + Java</title>
-<meta name="description" content="A local-only, offline app for learning Python and Java fundamentals, on the way to DSA. All data stays on your device.">
+<title>Code Dojo — DE Interview Prep</title>
+<meta name="description" content="A local-only, offline app for Data Engineer interview prep: Python drills, rapid-fire operator quizzes, and fundamentals warm-ups. All data stays on your device.">
 <style>
 :root{
   --bg:#f4f6fb; --card:#ffffff; --ink:#16202e; --muted:#64748b; --line:#e2e8f0;
@@ -774,6 +774,80 @@ const DE_LESSONS = [
 }
 ];
 if (typeof module !== 'undefined' && module.exports) module.exports = {DE_LESSONS};
+
+</script>
+<script>
+'use strict';
+/* Code Dojo — Rapid Fire decks. Short operator-fluency cards, answered against
+   a per-card countdown. Card shape:
+   {code, q, choices[4], answer, why, run?, expect?, runErr?}
+   run/expect: a program executed by the test suite through the app engine —
+   its printed output must equal the correct choice (machine-checked answers).
+   runErr: the program must fail in the engine (the card teaches an error).
+   Cards without run are hand-verified (engine lacks the method, e.g. extend). */
+const RAPID_DECKS = [
+{
+  id: 'rapid-lists', icon: '🧰', title: 'List Operators',
+  tagline: 'append, slice, sort, pop — no thinking, just reflexes',
+  cards: [
+    {code: 'nums = [3, 1, 2]\nnums.append(4)\nprint(nums)', q: 'What prints?', choices: ['[3, 1, 2, 4]', '[4, 3, 1, 2]', '[3, 1, 2]', '4'], answer: 0, why: 'append() adds ONE item to the END of the list, in place.', run: 'nums = [3, 1, 2]\nnums.append(4)\nprint(nums)', expect: '[3, 1, 2, 4]'},
+    {code: 'nums = [3, 1, 2]\nnums.append([4, 5])\nprint(nums)', q: 'What prints?', choices: ['[3, 1, 2, 4, 5]', '[3, 1, 2, [4, 5]]', '[3, 1, 2, 4]', 'It raises TypeError'], answer: 1, why: 'append takes ONE object — a list goes in whole, as a single nested item. extend() is the one that spreads.', run: 'nums = [3, 1, 2]\nnums.append([4, 5])\nprint(nums)', expect: '[3, 1, 2, [4, 5]]'},
+    {code: 'nums = [3, 1, 2]\nnums.extend([4, 5])\nprint(nums)', q: 'What prints?', choices: ['[3, 1, 2, [4, 5]]', '[3, 1, 2, 4, 5]', '[4, 5, 3, 1, 2]', 'It raises TypeError'], answer: 1, why: 'extend() walks the other list and adds EACH item — the opposite of append-with-a-list.'},
+    {code: 'nums = [3, 1, 2]\nresult = nums.sort()\nprint(result)', q: 'What prints?', choices: ['[1, 2, 3]', '3', 'None', 'True'], answer: 2, why: 'sort() changes the list in place and hands you NOTHING back — it returns None. sorted(nums) is the one that returns a new list.', run: 'nums = [3, 1, 2]\nresult = nums.sort()\nprint(result)', expect: 'None'},
+    {code: 'a = [3, 1, 2]\nb = sorted(a)\nprint(a)', q: 'What prints?', choices: ['[1, 2, 3]', '[3, 1, 2]', 'None', '[2, 1, 3]'], answer: 1, why: 'sorted() builds a NEW list and leaves the original untouched. a is still in its original order.', run: 'a = [3, 1, 2]\nb = sorted(a)\nprint(a)', expect: '[3, 1, 2]'},
+    {code: 'nums = [10, 20, 30]\nx = nums.pop()\nprint(x)', q: 'What prints?', choices: ['10', '[10, 20]', '30', 'None'], answer: 2, why: 'pop() with no index removes AND returns the LAST item.', run: 'nums = [10, 20, 30]\nx = nums.pop()\nprint(x)', expect: '30'},
+    {code: 'nums = [10, 20, 30]\nnums.pop()\nprint(nums)', q: 'What prints?', choices: ['[10, 20, 30]', '[30]', '[10, 20]', '[20, 30]'], answer: 2, why: 'pop() mutates the list it is called on — the popped item is gone from nums itself.', run: 'nums = [10, 20, 30]\nnums.pop()\nprint(nums)', expect: '[10, 20]'},
+    {code: 'nums = [10, 20, 30]\nx = nums.pop(0)\nprint(x)', q: 'What prints?', choices: ['30', '0', '10', 'None'], answer: 2, why: 'pop(i) removes and returns the item AT index i — pop(0) takes the first item.', run: 'nums = [10, 20, 30]\nx = nums.pop(0)\nprint(x)', expect: '10'},
+    {code: 'nums = [10, 20, 30]\nprint(nums[-1])', q: 'What prints?', choices: ['IndexError', '10', '20', '30'], answer: 3, why: 'Negative indexes count from the end: -1 is always the last item.', run: 'nums = [10, 20, 30]\nprint(nums[-1])', expect: '30'},
+    {code: 'nums = [10, 20, 30]\nprint(nums[0:2])', q: 'What prints?', choices: ['[10, 20, 30]', '[10, 20]', '[20, 30]', '[10]'], answer: 1, why: 'A slice includes the start index and EXCLUDES the end index — [0:2] is items 0 and 1.', run: 'nums = [10, 20, 30]\nprint(nums[0:2])', expect: '[10, 20]'},
+    {code: 'nums = [10, 20, 30]\nprint(nums[1:])', q: 'What prints?', choices: ['[10]', '[10, 20, 30]', '[20, 30]', '[30]'], answer: 2, why: 'An empty end in a slice means "to the end of the list".', run: 'nums = [10, 20, 30]\nprint(nums[1:])', expect: '[20, 30]'},
+    {code: 'nums = [10, 20, 30]\nprint(nums[::-1])', q: 'What prints?', choices: ['[10, 20, 30]', '[30, 20, 10]', 'It raises ValueError', '[-10, -20, -30]'], answer: 1, why: 'A slice step of -1 walks the list backwards — [::-1] is the reversed COPY idiom.'},
+    {code: 'a = [1, 2]\nb = a + [3]\nprint(a)', q: 'What prints?', choices: ['[1, 2, 3]', '[1, 2]', '[3]', 'None'], answer: 1, why: '+ builds a brand-NEW list and leaves both operands alone. Only in-place methods (append, extend) change a.', run: 'a = [1, 2]\nb = a + [3]\nprint(a)', expect: '[1, 2]'},
+    {code: 'print([0] * 3)', q: 'What prints?', choices: ['[0]', '[0, 0, 0]', '0', '[3]'], answer: 1, why: '* repeats the list that many times and returns a new list.'},
+    {code: 'grid = [[0]] * 3\ngrid[0].append(9)\nprint(grid)', q: 'What prints?', choices: ['[[0, 9], [0], [0]]', '[[0, 9], [0, 9], [0, 9]]', '[[0], [0], [0], [9]]', 'It raises IndexError'], answer: 1, why: 'The trap: * copies the REFERENCE, so all three rows are the SAME inner list. Mutating one mutates every row.'},
+    {code: 'nums = [5, 7, 5]\nnums.remove(5)\nprint(nums)', q: 'What prints?', choices: ['[7]', '[7, 5]', '[5, 7]', '[]'], answer: 1, why: 'remove(x) deletes only the FIRST matching value — the second 5 survives.', run: 'nums = [5, 7, 5]\nnums.remove(5)\nprint(nums)', expect: '[7, 5]'},
+    {code: 'nums = [5, 7, 5]\nnums.remove(9)', q: 'What happens?', choices: ['Nothing — missing values are ignored', 'The list is unchanged but 9 is appended', 'ValueError', 'IndexError'], answer: 2, why: 'remove() of a value that is not in the list raises ValueError. It never fails silently.'},
+    {code: 'print(7 in [5, 7, 5])', q: 'What prints?', choices: ['False', '1', 'True', '2'], answer: 2, why: 'in answers membership True/False — it does not return a position or a count.', run: 'print(7 in [5, 7, 5])', expect: 'True'},
+    {code: 'nums = [1, 2, 3]\nnums.append(4)\nnums.pop()\nprint(len(nums))', q: 'What prints?', choices: ['4', '2', '3', '5'], answer: 2, why: 'append grows it to 4, pop shrinks it back — len is 3. Track the mutations, not the starting size.', run: 'nums = [1, 2, 3]\nnums.append(4)\nnums.pop()\nprint(len(nums))', expect: '3'},
+    {code: "print(['a', 'b', 'c'].index('b'))", q: 'What prints?', choices: ['2', "'b'", '1', 'True'], answer: 2, why: 'index(x) returns the POSITION of the first match — positions start at 0, so b sits at 1.'},
+    {code: 'print([5, 7, 5].count(5))', q: 'What prints?', choices: ['1', 'True', '0', '2'], answer: 3, why: 'count(x) is how many times x appears — the counting question `in` cannot answer.'},
+    {code: 'nums = [1, 3]\nnums.insert(1, 2)\nprint(nums)', q: 'What prints?', choices: ['[1, 3, 2]', '[2, 1, 3]', '[1, 2, 3]', '[1, 2]'], answer: 2, why: 'insert(i, x) puts x AT index i and shifts everything after it one place right.'},
+    {code: 'a = [1, 2]\nb = a\nb.append(3)\nprint(a)', q: 'What prints?', choices: ['[1, 2]', '[1, 2, 3]', '[3]', 'It raises NameError'], answer: 1, why: 'b = a is NOT a copy — it is a second name tag on the SAME list. Append through b and a sees it. Use a.copy() or a[:] for a real copy.', run: 'a = [1, 2]\nb = a\nb.append(3)\nprint(a)', expect: '[1, 2, 3]'},
+    {code: 'a, b = [10, 20]\nprint(b)', q: 'What prints?', choices: ['10', '[10, 20]', '20', 'It raises ValueError'], answer: 2, why: 'Unpacking assigns positionally: a takes the first item, b takes the second.'}
+  ]
+},
+{
+  id: 'rapid-dicts', icon: '🗝️', title: 'Dictionary Operators',
+  tagline: 'get, items, pop, setdefault — the DE workhorses',
+  cards: [
+    {code: "d = {'a': 1}\nprint(d.get('b'))", q: 'What prints?', choices: ['KeyError', '0', 'None', "'b'"], answer: 2, why: '.get() on a missing key returns None instead of raising. That silence is exactly why the counting pattern uses it.', run: "d = {'a': 1}\nprint(d.get('b'))", expect: 'None'},
+    {code: "d = {'a': 1}\nprint(d['b'])", q: 'What happens?', choices: ['Prints None', 'Prints 0', "Adds 'b' with value None", 'KeyError'], answer: 3, why: 'Brackets on a missing key raise KeyError — brackets assert the key MUST exist. .get() is the polite version.', run: "d = {'a': 1}\nprint(d['b'])", runErr: true},
+    {code: "d = {'a': 1}\nprint(d.get('b', 0))", q: 'What prints?', choices: ['None', '0', 'KeyError', 'False'], answer: 1, why: '.get(key, default) returns YOUR default for missing keys — 0 here, which is what makes counting safe.', run: "d = {'a': 1}\nprint(d.get('b', 0))", expect: '0'},
+    {code: "counts = {}\ncounts['x'] = counts.get('x', 0) + 1\ncounts['x'] = counts.get('x', 0) + 1\nprint(counts['x'])", q: 'What prints?', choices: ['1', '0', '2', 'KeyError'], answer: 2, why: 'The bucket pattern: get with default 0 survives the first sighting of a key, then increments. Two passes, count of 2.', run: "counts = {}\ncounts['x'] = counts.get('x', 0) + 1\ncounts['x'] = counts.get('x', 0) + 1\nprint(counts['x'])", expect: '2'},
+    {code: "print('a' in {'a': 1})", q: 'What prints?', choices: ['False', 'True', '1', 'None'], answer: 1, why: 'in on a dict tests the KEYS. a is a key, so True.', run: "print('a' in {'a': 1})", expect: 'True'},
+    {code: "print(1 in {'a': 1})", q: 'What prints?', choices: ['True', '1', 'False', 'KeyError'], answer: 2, why: 'Still keys only — 1 is a VALUE in this dict, and `in` never looks at values. Use 1 in d.values() for that.', run: "print(1 in {'a': 1})", expect: 'False'},
+    {code: "d = {'a': 1, 'b': 2}\nfor k, v in d.items():\n    print(v)", q: 'What prints (one value per line)?', choices: ['a then b', '1 then 2', 'Only 1', 'It raises ValueError'], answer: 1, why: '.items() yields (key, value) PAIRS — unpacking into k, v splits each pair, and v is the value.', run: "d = {'a': 1, 'b': 2}\nfor k, v in d.items():\n    print(v)", expect: '1 then 2'},
+    {code: "d = {'a': 1}\nd.update({'a': 9, 'b': 2})\nprint(d['a'])", q: 'What prints?', choices: ['1', '9', '2', 'It raises TypeError'], answer: 1, why: 'update() overwrites existing keys and adds new ones — a ends at 9, and b is added.', run: "d = {'a': 1}\nd.update({'a': 9, 'b': 2})\nprint(d['a'])", expect: '9'},
+    {code: "d = {'a': 1, 'b': 2}\nv = d.pop('a')\nprint(v)", q: 'What prints?', choices: ["'a'", 'None', '2', '1'], answer: 3, why: 'dict.pop(key) removes the pair AND returns the VALUE — same deal as list.pop, but by key.', run: "d = {'a': 1, 'b': 2}\nv = d.pop('a')\nprint(v)", expect: '1'},
+    {code: "d = {'a': 1, 'b': 2}\nd.pop('a')\nprint(len(d))", q: 'What prints?', choices: ['2', '0', '1', 'KeyError'], answer: 2, why: 'len() on a dict counts KEYS — one pair popped, one remains.', run: "d = {'a': 1, 'b': 2}\nd.pop('a')\nprint(len(d))", expect: '1'},
+    {code: "d = {'a': 1}\nd.setdefault('a', 99)\nprint(d['a'])", q: 'What prints?', choices: ['99', '1', 'None', 'It raises KeyError'], answer: 1, why: 'setdefault only sets when the key is ABSENT. a already exists, so 99 is ignored.', run: "d = {'a': 1}\nd.setdefault('a', 99)\nprint(d['a'])", expect: '1'},
+    {code: "d = {'a': 1}\nd.setdefault('b', 99)\nprint(d['b'])", q: 'What prints?', choices: ['None', '1', 'KeyError', '99'], answer: 3, why: 'b is absent, so setdefault inserts it with the default 99 — "set only if missing".', run: "d = {'a': 1}\nd.setdefault('b', 99)\nprint(d['b'])", expect: '99'},
+    {code: "print(len({'a': 1, 'b': 2, 'c': 3}))", q: 'What prints?', choices: ['6', '3', '1', 'It raises TypeError'], answer: 1, why: 'len(dict) = number of key-value PAIRS — three keys, len 3.', run: "print(len({'a': 1, 'b': 2, 'c': 3}))", expect: '3'},
+    {code: "d = {'a': 1}\ndel d['a']\nprint(d['a'])", q: 'What happens?', choices: ['Prints None', 'Prints 1', 'KeyError', 'Nothing — del is silent, print shows an empty dict'], answer: 2, why: 'del removes the pair completely. Reading it afterwards is a missing-key read: KeyError.', run: "d = {'a': 1}\ndel d['a']\nprint(d['a'])", runErr: true},
+    {code: "a = {'x': 1}\nb = {'x': 2, 'y': 3}\nc = a | b\nprint(c['x'])", q: 'What prints?', choices: ['1', '3', '2', 'It raises TypeError'], answer: 2, why: 'With the merge operator |, the RIGHT dict wins on conflicts — and neither a nor b is changed; c is new.'},
+    {code: "d = {'a': 3, 'b': 1}\nranked = sorted(d.items(), key=lambda kv: kv[1])\nprint(ranked[0][0])", q: 'What prints?', choices: ['a', 'b', '1', '3'], answer: 1, why: 'sorted on .items() with key kv[1] ranks by VALUE — b has the smallest value, so b leads. Sorting the pairs, never the dict.', run: "d = {'a': 3, 'b': 1}\nranked = sorted(d.items(), key=lambda kv: kv[1])\nprint(ranked[0][0])", expect: 'b'},
+    {code: "print(sorted({'b': 2, 'a': 1}))", q: 'What prints?', choices: ["[('a', 1), ('b', 2)]", "['b', 'a']", "['a', 'b']", '[1, 2]'], answer: 2, why: 'sorted(a_dict) sorts the KEYS only — the values are not even in the room. Rank data with sorted(d.items(), key=...).', run: "print(sorted({'b': 2, 'a': 1}))", expect: "['a', 'b']"},
+    {code: "user = {'name': 'Ana', 'tags': ['pro']}\nprint(user['tags'][0])", q: 'What prints?', choices: ["'tags'", "['pro']", "'Ana'", 'pro'], answer: 3, why: 'Chain the lookups: user[\'tags\'] is the list, [0] takes its first item.', run: "user = {'name': 'Ana', 'tags': ['pro']}\nprint(user['tags'][0])", expect: 'pro'},
+    {code: "print({'a': 1, 'b': 2} == {'b': 2, 'a': 1})", q: 'What prints?', choices: ['False', 'True', 'It raises TypeError', 'None'], answer: 1, why: 'Dict equality ignores insertion order — same keys with same values are equal.'},
+    {code: "d = {}\nd[[1, 2]] = 'x'", q: 'What happens?', choices: ["Stores 'x' under the list", 'TypeError — unhashable type', 'The list becomes a tuple key', 'Nothing — the line is ignored'], answer: 1, why: 'Keys must be hashable. Lists are mutable, so they can never be keys — strings, numbers and tuples can.'},
+    {code: "print(sum({'a': 1, 'b': 2}.values()))", q: 'What prints?', choices: ["'ab'", '3', '0', 'It raises TypeError'], answer: 1, why: '.values() hands you the values view — sum() over it totals the values, keys untouched.', run: "print(sum({'a': 1, 'b': 2}.values()))", expect: '3'},
+    {code: "a = {'x': [1]}\nb = a.copy()\nb['x'].append(2)\nprint(a['x'])", q: 'What prints?', choices: ['[1]', '[2]', '[1, 2]', 'It raises AttributeError'], answer: 2, why: '.copy() is SHALLOW: the outer dict is new, but the list inside is still shared. Mutate the inner list through b and a sees it.'},
+    {code: "d = dict.fromkeys(['a', 'b'], [])\nd['a'].append(1)\nprint(d['b'])", q: 'What prints?', choices: ['[]', '[1]', 'None', 'KeyError'], answer: 1, why: 'fromkeys gives every key the SAME default object — one shared list. Appending via a changes what b sees. Same trap as [[0]] * 3.'},
+    {code: "d = {}\nd['new'] = 5\nprint('new' in d)", q: 'What prints?', choices: ['False', '5', 'True', 'None'], answer: 2, why: 'Assigning to a brand-new key CREATES the pair — no declaration needed. Then `in` finds the key.', run: "d = {}\nd['new'] = 5\nprint('new' in d)", expect: 'True'}
+  ]
+}
+];
+if (typeof module !== 'undefined' && module.exports) module.exports = {RAPID_DECKS};
 
 </script>
 <script>
@@ -1766,7 +1840,7 @@ var storageOK = true;
 function lsGet(){ try { return localStorage.getItem(KEY); } catch (e){ storageOK = false; return null; } }
 function lsSet(v){ try { localStorage.setItem(KEY, v); } catch (e){ storageOK = false; } }
 function defaultState(){
-  return {v: 2, xp: {drills: 0, fundamentals: 0}, done: {drills: {}, fundamentals: {}}, mistakes: [], streak: {last: '', count: 0}};
+  return {v: 2, xp: {drills: 0, fundamentals: 0, rapid: 0}, done: {drills: {}, fundamentals: {}}, rapid: {plays: {}, best: {}}, mistakes: [], streak: {last: '', count: 0}};
 }
 function migrate(s){
   if (!s) return defaultState();
@@ -1774,6 +1848,7 @@ function migrate(s){
     var d = defaultState();
     d.xp = Object.assign(d.xp, s.xp || {});
     d.done = Object.assign(d.done, s.done || {});
+    if (s.rapid){ d.rapid.plays = Object.assign(d.rapid.plays, s.rapid.plays || {}); d.rapid.best = Object.assign(d.rapid.best, s.rapid.best || {}); }
     d.mistakes = s.mistakes || []; d.streak = s.streak || d.streak;
     return d;
   }
@@ -1842,6 +1917,7 @@ function openLesson(coll, id, stage){
        buildCode: null, buildResult: null, buildFails: 0, showHint: false, showSolution: false,
        shapeDone: !L.build.shapeQ, shapeMsg: '', shapeGood: false,
        needVerdict: false, verdictDone: !L.build.verdictQ, verdictMsg: '', verdictGood: false,
+       xpAtStart: state.xp.drills + state.xp.fundamentals + state.xp.rapid,
        startedAt: Date.now()};
   render(); window.scrollTo(0, 0);
 }
@@ -1870,6 +1946,7 @@ function render(){
   if (S.screen === 'home') app.innerHTML = viewHome();
   else if (S.screen === 'lesson') app.innerHTML = viewLesson();
   else if (S.screen === 'review') app.innerHTML = viewReview();
+  else if (S.screen === 'rapid') app.innerHTML = viewRapid();
   if (S.screen === 'lesson'){
     var ta = document.getElementById('editor');
     if (ta && S.buildCode !== null && S.buildCode !== undefined) ta.value = S.buildCode;
@@ -1878,10 +1955,20 @@ function render(){
       if (el) el.textContent = '⏱ ' + elapsedStr();
     }, 1000);
   }
+  if (S.screen === 'rapid' && !S.finished && !S.checked){
+    timerInt = setInterval(function(){
+      var left = Math.max(0, S.deadline - Date.now());
+      var el = document.getElementById('cdText');
+      if (el) el.textContent = (left / 1000).toFixed(1) + 's';
+      var bar = document.getElementById('cdBar');
+      if (bar) bar.style.width = Math.round(left / (RAPID_SECONDS * 1000) * 100) + '%';
+      if (left <= 0){ stopTimer(); H.rapidTimeout(); }
+    }, 100);
+  }
 }
 function headerHtml(){
   return '<div class="topbar"><div class="logo">🥋 Code<span>Dojo</span></div>' +
-    '<div class="stats"><div class="stat">⭐ ' + (state.xp.drills + state.xp.fundamentals) + ' XP</div>' +
+    '<div class="stats"><div class="stat">⭐ ' + (state.xp.drills + state.xp.fundamentals + state.xp.rapid) + ' XP</div>' +
     '<div class="stat">🔥 ' + state.streak.count + '</div></div></div>';
 }
 function sectionHtml(coll){
@@ -1900,10 +1987,23 @@ function sectionHtml(coll){
   h += '<div class="progressbar"><div style="width:' + Math.round(doneTotal / total * 100) + '%"></div></div>';
   return h;
 }
+var RAPID_RUN = 12, RAPID_SECONDS = 10;
+function rapidDeck(id){ for (var i = 0; i < RAPID_DECKS.length; i++) if (RAPID_DECKS[i].id === id) return RAPID_DECKS[i]; return null; }
+function rapidSectionHtml(){
+  var h = '<div class="unithead">⚡ Rapid Fire — Operator Fluency</div><p class="note" style="margin:-4px 2px 10px">' + RAPID_RUN + ' cards, ' + RAPID_SECONDS + ' seconds each, shuffled every run. Wrong answers land in your review queue.</p>';
+  RAPID_DECKS.forEach(function(D){
+    var best = state.rapid.best[D.id] || 0, plays = state.rapid.plays[D.id] || 0;
+    h += '<button class="pathcard" onclick="H.rapidStart(\'' + D.id + '\')">' +
+      '<div class="icon">' + D.icon + '</div><div><div class="t">' + escHtml(D.title) + '</div>' +
+      '<div class="s">' + escHtml(D.tagline) + '</div></div><div class="dots">' + (plays ? '🏆 best ' + best + ' / ' + RAPID_RUN + ' · ' + plays + ' run' + (plays === 1 ? '' : 's') : '▶ Start') + '</div></button>';
+  });
+  return h;
+}
 function viewHome(){
   var h = headerHtml();
   if (!storageOK) h += '<div class="warn">⚠️ This browser is blocking local saving in this context, so progress may not survive closing the tab. Use <b>Export progress</b> below after each session to keep a backup file you can re-import.</div>';
   h += sectionHtml('drills');
+  h += rapidSectionHtml();
   h += sectionHtml('fundamentals');
   h += '<div class="card"><h3 style="margin-top:0">How a drill works</h3>' +
     '<p>Predict → step through → rebuild → build, at interview pace. Every drill Build makes you pass two habit gates: a <b>shape check</b> before the editor unlocks (name the set, check the shape), and a <b>verdict check</b> after a passing run — you may only claim what your program printed.</p>' +
@@ -2066,8 +2166,9 @@ function viewBuild(L){
 }
 function viewDone(L){
   var ls = lessonsOf(S.coll); var idx = ls.indexOf(L);
+  var earnedNow = (state.xp.drills + state.xp.fundamentals + state.xp.rapid) - (S.xpAtStart || 0);
   var h = '<div class="card center"><div class="bigemoji">🎉</div><h2>Lesson complete!</h2>' +
-    '<p>You earned ' + (XP_PER * 4) + ' XP in <b>' + escHtml(COLLECTIONS[S.coll].title) + '</b> for <b>' + escHtml(L.title) + '</b> — in ' + elapsedStr() + (L.target ? ' (target ' + L.target + ')' : '') + '.</p>';
+    '<p>' + (earnedNow > 0 ? 'You earned ' + earnedNow + ' XP' : 'Already banked — no new XP for a redo') + ' in <b>' + escHtml(COLLECTIONS[S.coll].title) + '</b> for <b>' + escHtml(L.title) + '</b> — in ' + elapsedStr() + (L.target ? ' (target ' + L.target + ')' : '') + '.</p>';
   if (idx + 1 < ls.length) h += '<button class="btn" onclick="H.open(\'' + S.coll + '\',\'' + ls[idx + 1].id + '\')">Next lesson: ' + escHtml(ls[idx + 1].title) + ' →</button>';
   h += '<button class="btn secondary" onclick="H.home()">Back to path</button></div>';
   return h;
@@ -2079,10 +2180,43 @@ function viewReview(){
   var seen = {};
   state.mistakes.slice().reverse().forEach(function(m){
     var key = m.coll + m.concept + m.kind; if (seen[key]) return; seen[key] = 1;
-    var L = lessonById(m.coll, m.concept); if (!L) return;
-    h += '<div class="checkline">❌ ' + escHtml(L.title) + ' — ' + escHtml(m.kind) + ' (' + escHtml(m.when) + ') ' +
+    var title = null, kindLabel = m.kind;
+    if (m.coll === 'rapid'){ var D = rapidDeck(m.concept); if (!D) return; title = D.title + ' (Rapid Fire)'; kindLabel = 'missed card'; }
+    else { var L = lessonById(m.coll, m.concept); if (!L) return; title = L.title; }
+    h += '<div class="checkline">❌ ' + escHtml(title) + ' — ' + escHtml(kindLabel) + ' (' + escHtml(m.when) + ') ' +
       '<a href="#" onclick="H.openFromReview(\'' + m.coll + '\',\'' + m.concept + '\',\'' + m.kind + '\');return false;">redo →</a></div>';
   });
+  return h + '</div>';
+}
+
+function viewRapid(){
+  var D = rapidDeck(S.deckId);
+  var h = '<button class="backbtn" onclick="H.home()">← Quit run</button>';
+  h += '<h2 style="margin:2px 0 4px">' + D.icon + ' ' + escHtml(D.title) + ' — Rapid Fire</h2>';
+  if (S.finished){
+    var acc = Math.round(S.score / S.order.length * 100);
+    h += '<div class="card center"><div class="bigemoji">' + (acc >= 80 ? '🏆' : acc >= 50 ? '💪' : ' 🌱') + '</div><h2>' + S.score + ' / ' + S.order.length + '</h2>' +
+      '<p>Accuracy ' + acc + '% · best streak 🔥 ' + S.bestStreak + ' · earned ⭐ ' + S.earned + ' XP this run.</p>' +
+      '<p class="note">Best so far: ' + (state.rapid.best[D.id] || 0) + ' / ' + S.order.length + ' over ' + (state.rapid.plays[D.id] || 0) + ' run' + (state.rapid.plays[D.id] === 1 ? '' : 's') + '. Misses are in your review queue on the home screen.</p>' +
+      '<button class="btn" onclick="H.rapidStart(\'' + D.id + '\')">↻ Run it again</button>' +
+      '<button class="btn secondary" onclick="H.home()">Back to path</button></div>';
+    return h;
+  }
+  var card = D.cards[S.order[S.pos]];
+  h += '<div class="note">Card ' + (S.pos + 1) + ' of ' + S.order.length + ' · ⭐ score ' + S.score + (S.streak > 1 ? ' · 🔥 streak ' + S.streak : '') + ' · <span id="cdText">' + RAPID_SECONDS.toFixed(1) + 's</span></div>';
+  h += '<div class="progressbar"><div id="cdBar" style="width:100%"></div></div>';
+  h += '<div class="card">' + codeBlock(card.code) + '<p><b>' + escHtml(card.q) + '</b></p>';
+  h += card.choices.map(function(ch, i){
+    var cls = '';
+    if (S.checked && i === card.answer) cls = 'correct';
+    else if (S.checked && i === S.selected) cls = 'wrong';
+    else if (i === S.selected) cls = 'selected';
+    return '<button class="choice ' + cls + '" ' + (S.checked ? 'disabled' : '') + ' onclick="H.rapidPick(' + i + ')">' + escHtml(ch) + '</button>';
+  }).join('');
+  if (S.checked){
+    h += feedbackHtml(S.wasCorrect, (S.timedOut ? '⏰ Time. ' : '') + card.why);
+    h += '<button class="btn" onclick="H.rapidNext()">' + (S.pos + 1 >= S.order.length ? 'See results →' : 'Next card →') + '</button>';
+  }
   return h + '</div>';
 }
 
@@ -2091,7 +2225,50 @@ window.H = {
   home: goHome,
   review: function(){ stopTimer(); S = {screen: 'review'}; render(); window.scrollTo(0, 0); },
   open: function(coll, id){ openLesson(coll, id, null); },
-  openFromReview: function(coll, id, kind){ openLesson(coll, id, kind === 'build' || kind === 'shape' || kind === 'verdict' ? 'build' : kind); },
+  openFromReview: function(coll, id, kind){
+    if (coll === 'rapid'){ H.rapidStart(id); return; }
+    openLesson(coll, id, kind === 'build' || kind === 'shape' || kind === 'verdict' ? 'build' : kind);
+  },
+  rapidStart: function(deckId){
+    stopTimer();
+    var D = rapidDeck(deckId);
+    var idx = D.cards.map(function(_, i){ return i; });
+    for (var i = idx.length - 1; i > 0; i--){ var j = Math.floor(Math.random() * (i + 1)); var t = idx[i]; idx[i] = idx[j]; idx[j] = t; }
+    S = {screen: 'rapid', deckId: deckId, order: idx.slice(0, RAPID_RUN), pos: 0,
+         score: 0, streak: 0, bestStreak: 0, earned: 0,
+         selected: -1, checked: false, wasCorrect: false, timedOut: false, finished: false,
+         deadline: Date.now() + RAPID_SECONDS * 1000, startedAt: Date.now()};
+    render(); window.scrollTo(0, 0);
+  },
+  rapidPick: function(i){
+    if (S.checked || S.finished) return;
+    var D = rapidDeck(S.deckId); var card = D.cards[S.order[S.pos]];
+    S.selected = i; S.checked = true; S.wasCorrect = i === card.answer;
+    if (S.wasCorrect){
+      S.score++; S.streak++; if (S.streak > S.bestStreak) S.bestStreak = S.streak;
+      S.earned += XP_PER; state.xp.rapid += XP_PER; save();
+    } else {
+      S.streak = 0; recordMistake('rapid', S.deckId, 'rapid');
+    }
+    render();
+  },
+  rapidTimeout: function(){
+    if (S.checked || S.finished) return;
+    S.checked = true; S.wasCorrect = false; S.timedOut = true; S.streak = 0;
+    recordMistake('rapid', S.deckId, 'rapid');
+    render();
+  },
+  rapidNext: function(){
+    if (S.pos + 1 >= S.order.length){
+      state.rapid.plays[S.deckId] = (state.rapid.plays[S.deckId] || 0) + 1;
+      if (S.score > (state.rapid.best[S.deckId] || 0)) state.rapid.best[S.deckId] = S.score;
+      save(); S.finished = true;
+    } else {
+      S.pos++; S.selected = -1; S.checked = false; S.wasCorrect = false; S.timedOut = false;
+      S.deadline = Date.now() + RAPID_SECONDS * 1000;
+    }
+    render(); window.scrollTo(0, 0);
+  },
   toStage: function(stage){
     if (stage === 'build' && S.buildCode === null){
       var L = lessonById(S.coll, S.conceptId); S.buildCode = L.build.starter;
