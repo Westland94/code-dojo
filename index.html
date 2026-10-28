@@ -1294,6 +1294,67 @@ var SQL_LESSONS = [
       why: 'Absence is the signal. LEFT JOIN surfaces it as NULLs on the right; IS NULL collects exactly those rows.'
     }
   }
+},
+{
+  id: 'sql-toolkit', icon: '🧰', sql: true,
+  title: 'The Full Toolkit — CTEs, CASE & Set Ops',
+  tagline: 'Name your steps, branch inside a row, stack results.',
+  target: '6 min',
+  teach: {
+    body: 'Three tools turn nested spaghetti into readable queries.\n\nA CTE (WITH name AS (SELECT ...)) names an intermediate result so the main query reads top-down: build the numbered rows, name them, then filter. It changes NOTHING about the result — same grain, same rows — it is purely for humans, which is exactly why interviewers like it: they can follow your thinking.\n\nCASE is an if/else that lives inside a row: CASE WHEN n >= 3 THEN \'heavy\' ELSE \'light\' END labels each row as it flows past. Inside an aggregate it becomes conditional counting — SUM(CASE WHEN ok THEN 1 ELSE 0 END) counts only the rows where the condition holds.\n\nSet operations stack whole results: UNION glues two SELECTs and dedupes; UNION ALL keeps duplicates; INTERSECT keeps only rows present in both; EXCEPT keeps rows in the first that are absent from the second.',
+    points: [
+      'A CTE is a named subquery. Same result, readable order: steps first, answer last.',
+      'CASE WHEN ... THEN ... ELSE ... END evaluates per row — the ELSE catches everything the WHENs miss.',
+      'SUM(CASE WHEN cond THEN 1 ELSE 0 END) is the standard trick for counting a subset inside one pass.',
+      'UNION dedupes (a hidden DISTINCT); UNION ALL does not. Column count and types must line up across the stack.'
+    ],
+    query: 'WITH counts AS (\n  SELECT user_id, COUNT(*) AS n\n  FROM events\n  GROUP BY user_id\n)\nSELECT user_id, n,\n  CASE WHEN n >= 3 THEN \'heavy\' ELSE \'light\' END AS kind\nFROM counts\nORDER BY user_id',
+    note: 'Read it top-down: counts builds the buckets, the outer query labels them. Two heavy users (u1, u2), three light.'
+  },
+  predict: {
+    code: 'SELECT day FROM events\nUNION\nSELECT day FROM orders',
+    question: 'How many rows does the UNION return?',
+    choices: ['4', '7', '8', '17'],
+    answer: 0,
+    why: 'Both tables use the same four days (Mon–Thu). UNION dedupes the stack: 4 rows. UNION ALL would return all 17.'
+  },
+  step: {
+    query: 'WITH numbered AS (\n  SELECT user_id, id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id DESC) AS rn\n  FROM events\n)\nSELECT user_id, id\nFROM numbered\nWHERE rn = 1\nORDER BY user_id',
+    notes: {
+      from: 'FROM reads the CTE \u201cnumbered\u201d — the subquery from lesson 4, now with a name. 10 rows, each carrying its rn.',
+      where: 'WHERE rn = 1 keeps each user\u2019s latest event: 5 rows. The CTE numbered; the outer query picks.',
+      select: 'SELECT drops the rn helper column.',
+      order: 'ORDER BY user_id presents the five winners in user order.'
+    },
+    finalQ: {
+      question: 'The CTE named \u201cnumbered\u201d contains…',
+      choices: ['All 10 events, each with its rn — filtering happens outside', 'Only the 5 latest events', 'One row per user, already grouped', 'A permanent new table in the database'],
+      answer: 0,
+      why: 'A CTE is just a named intermediate result. numbered holds every event with its number; WHERE rn = 1 does the picking. And nothing is saved — the CTE exists only for this query.'
+    }
+  },
+  parsons: {
+    prompt: 'Rebuild the query: every order id that is paid OR refunded, deduped.',
+    lines: ["SELECT id FROM orders WHERE status = 'paid'", 'UNION', "SELECT id FROM orders WHERE status = 'refunded'"],
+    expected: ['6 order ids — 101, 102, 103, 104, 106, 107']
+  },
+  build: {
+    prompt: 'Using a CTE, show each user: user_id, their event count (as n), and a label (as label) — \'frequent\' when n >= 3, otherwise \'occasional\'. Order by n descending, then user_id.',
+    starter: 'WITH counts AS (\n  -- one row per user, with their event count as n\n)\nSELECT ',
+    hint: 'Inside the CTE: SELECT user_id, COUNT(*) AS n FROM events GROUP BY user_id. Outside: CASE WHEN n >= 3 THEN \'frequent\' ELSE \'occasional\' END AS label, FROM counts.',
+    solution: 'WITH counts AS (\n  SELECT user_id, COUNT(*) AS n\n  FROM events\n  GROUP BY user_id\n)\nSELECT user_id, n, CASE WHEN n >= 3 THEN \'frequent\' ELSE \'occasional\' END AS label\nFROM counts\nORDER BY n DESC, user_id',
+    checks: [{type: 'result', ordered: true, expected: [
+      {user_id: 'u1', n: 3, label: 'frequent'}, {user_id: 'u2', n: 3, label: 'frequent'},
+      {user_id: 'u3', n: 2, label: 'occasional'}, {user_id: 'u4', n: 1, label: 'occasional'},
+      {user_id: 'u5', n: 1, label: 'occasional'}
+    ]}],
+    shapeQ: {
+      question: 'Before you write it: a CTE changes…',
+      choices: ['Nothing about the result — it names an intermediate step so the query reads top-down', 'The grain — it groups rows automatically', 'The order — it sorts the final result', 'The database — it saves a permanent table'],
+      answer: 0,
+      why: 'A CTE is organization, not computation. If the CTE version and the nested version disagree, one of them has a bug — they must return identical rows.'
+    }
+  }
 }
 ];
 
@@ -2282,7 +2343,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = {runProgra
 (function(){
 var KEYWORDS = {SELECT:1, FROM:1, WHERE:1, GROUP:1, BY:1, HAVING:1, ORDER:1, LIMIT:1, OFFSET:1,
   JOIN:1, INNER:1, LEFT:1, RIGHT:1, OUTER:1, ON:1, AS:1, AND:1, OR:1, NOT:1, IN:1, IS:1, NULL:1,
-  BETWEEN:1, LIKE:1, DISTINCT:1, ASC:1, DESC:1, OVER:1, PARTITION:1, UNION:1, ALL:1, CASE:1};
+  BETWEEN:1, LIKE:1, DISTINCT:1, ASC:1, DESC:1, OVER:1, PARTITION:1, UNION:1, ALL:1, CASE:1,
+  WITH:1, WHEN:1, THEN:1, ELSE:1, END:1, EXCEPT:1, INTERSECT:1};
 
 function tokenize(sql){
   var toks = [], i = 0, n = sql.length;
@@ -2315,6 +2377,41 @@ Parser.prototype.eatOp = function(op){ if (this.isOp(op)){ this.i++; return true
 Parser.prototype.expectOp = function(op){ if (!this.eatOp(op)) throw new Error('Expected "' + op + '" in query'); };
 
 Parser.prototype.parseQuery = function(){
+  var ctes = null;
+  if (this.eatKw('WITH')){
+    ctes = [];
+    for (;;){
+      var nm = this.next(); if (!nm || nm.t !== 'id') throw new Error('A CTE needs a name: WITH name AS (SELECT ...)');
+      this.expectKw('AS'); this.expectOp('(');
+      var sub = this.parseQuery();
+      this.expectOp(')');
+      ctes.push({name: nm.v, query: sub});
+      if (!this.eatOp(',')) break;
+    }
+  }
+  var first = this.parseSelectCore();
+  var ops = [];
+  while (this.isKw('UNION') || this.isKw('INTERSECT') || this.isKw('EXCEPT')){
+    var op = this.next().v.toUpperCase();
+    var all = op === 'UNION' && this.eatKw('ALL');
+    ops.push({op: op, all: !!all, core: this.parseSelectCore()});
+  }
+  if (!ops.length){
+    this.parseOrderLimit(first);
+    first.ctes = ctes;
+    return first;
+  }
+  var set = {first: first, setOps: ops, ctes: ctes};
+  this.parseOrderLimit(set);
+  return set;
+};
+Parser.prototype.parseOrderLimit = function(q){
+  if (this.eatKw('ORDER')){ this.expectKw('BY'); q.orderBy = this.parseOrderTerms(); }
+  if (this.eatKw('LIMIT')){ var lt = this.next(); if (!lt || lt.t !== 'num') throw new Error('LIMIT needs a number'); q.limit = lt.v;
+    if (this.eatKw('OFFSET')){ var ot = this.next(); if (!ot || ot.t !== 'num') throw new Error('OFFSET needs a number'); q.offset = ot.v; } }
+  this.eatOp(';');
+};
+Parser.prototype.parseSelectCore = function(){
   this.expectKw('SELECT');
   var q = {distinct: this.eatKw('DISTINCT'), items: [], joins: []};
   if (this.eatOp('*')) q.items.push({star: true});
@@ -2347,10 +2444,6 @@ Parser.prototype.parseQuery = function(){
   if (this.eatKw('WHERE')) q.where = this.parseExpr();
   if (this.eatKw('GROUP')){ this.expectKw('BY'); q.groupBy = this.parseExprList(); }
   if (this.eatKw('HAVING')) q.having = this.parseExpr();
-  if (this.eatKw('ORDER')){ this.expectKw('BY'); q.orderBy = this.parseOrderTerms(); }
-  if (this.eatKw('LIMIT')){ var lt = this.next(); if (!lt || lt.t !== 'num') throw new Error('LIMIT needs a number'); q.limit = lt.v;
-    if (this.eatKw('OFFSET')){ var ot = this.next(); if (!ot || ot.t !== 'num') throw new Error('OFFSET needs a number'); q.offset = ot.v; } }
-  this.eatOp(';');
   return q;
 };
 Parser.prototype.parseSource = function(){
@@ -2460,6 +2553,7 @@ Parser.prototype.parsePrimary = function(){
   if (t.t === 'op' && t.v === '('){ var e = this.parseExpr(); this.expectOp(')'); return e; }
   if (t.t === 'id'){
     var up = t.v.toUpperCase();
+    if (up === 'CASE') return this.parseCase();
     if (up === 'NULL') return {type: 'lit', v: null};
     if (up === 'TRUE') return {type: 'lit', v: true};
     if (up === 'FALSE') return {type: 'lit', v: false};
@@ -2495,13 +2589,29 @@ Parser.prototype.parsePrimary = function(){
   throw new Error('Unexpected token in query: ' + t.v);
 };
 
+Parser.prototype.parseCase = function(){
+  var node = {type: 'case', whens: [], els: null, base: null};
+  if (!this.isKw('WHEN')) node.base = this.parseExpr();
+  while (this.eatKw('WHEN')){
+    var cond = this.parseExpr();
+    this.expectKw('THEN');
+    node.whens.push({cond: cond, val: this.parseExpr()});
+  }
+  if (!node.whens.length) throw new Error('CASE needs at least one WHEN ... THEN');
+  if (this.eatKw('ELSE')) node.els = this.parseExpr();
+  this.expectKw('END');
+  return node;
+};
+
 /* ---------- evaluation ---------- */
 var AGGS = {COUNT: 1, SUM: 1, AVG: 1, MIN: 1, MAX: 1};
 function exprHasAgg(e){
-  if (!e) return false;
-  if (e.type === 'func') return !!AGGS[e.name] || e.args.some(exprHasAgg);
-  return ['l', 'r', 'x', 'lo', 'hi', 'p'].some(function(k){ return exprHasAgg(e[k]); }) ||
-         (e.list || []).some(exprHasAgg);
+  if (!e || typeof e !== 'object') return false;
+  if (e.type === 'func' && AGGS[e.name]) return true;
+  return Object.keys(e).some(function(k){
+    var v = e[k];
+    return Array.isArray(v) ? v.some(exprHasAgg) : exprHasAgg(v);
+  });
 }
 function truthy(v){ return v === true || (typeof v === 'number' && v !== 0); }
 
@@ -2518,6 +2628,15 @@ function evalExpr(e, ctx, group){
     case 'and': { var a2 = evalExpr(e.l, ctx, group), b2 = evalExpr(e.r, ctx, group);
       if (a2 === false || b2 === false) return false; if (a2 == null || b2 == null) return null; return truthy(a2) && truthy(b2); }
     case 'not': { var v = evalExpr(e.x, ctx, group); return v == null ? null : !truthy(v); }
+    case 'case': {
+      var bv = e.base ? evalExpr(e.base, ctx, group) : undefined;
+      for (var wi = 0; wi < e.whens.length; wi++){
+        var w = e.whens[wi];
+        if (e.base){ if (bv !== null && bv === evalExpr(w.cond, ctx, group)) return evalExpr(w.val, ctx, group); }
+        else if (truthy(evalExpr(w.cond, ctx, group))) return evalExpr(w.val, ctx, group);
+      }
+      return e.els ? evalExpr(e.els, ctx, group) : null;
+    }
     case 'isnull': { var v2 = evalExpr(e.x, ctx, group); return e.neg ? v2 != null && v2 !== undefined : (v2 === null || v2 === undefined); }
     case 'cmp': {
       var l = evalExpr(e.l, ctx, group), r = evalExpr(e.r, ctx, group);
@@ -2581,7 +2700,7 @@ function evalFunc(e, ctx, group){
 function tableCtxs(db, src){
   var rows, alias;
   if (src.subquery){
-    var res = execute(src.subquery, db, null);
+    var res = executeTop(src.subquery, db, null);
     rows = res.rows; alias = src.alias;
     return rows.map(function(r){
       var ctx = {};
@@ -2599,7 +2718,7 @@ function tableCtxs(db, src){
   });
 }
 function tableCols(db, src){
-  if (src.subquery){ var res = execute(src.subquery, db, null); return res.cols; }
+  if (src.subquery){ var res = executeTop(src.subquery, db, null); return res.cols; }
   var t = db[src.table];
   if (!t) throw new Error('Unknown table: ' + src.table);
   return t.length ? Object.keys(t[0]) : [];
@@ -2645,6 +2764,7 @@ function exprLabel(e){
     case 'between': return exprLabel(e.x) + ' BETWEEN ' + exprLabel(e.lo) + ' AND ' + exprLabel(e.hi);
     case 'like': return exprLabel(e.x) + ' LIKE ' + exprLabel(e.p);
     case 'neg': return '-' + exprLabel(e.x);
+    case 'case': return 'CASE...';
   }
   return '';
 }
@@ -2656,7 +2776,7 @@ function itemName(item, srcCols){
   return exprLabel(e);
 }
 
-function execute(q, db, trace){
+function executeCore(q, db, trace){
   var CAP = 15;
   function snap(clause, label, ctxs){
     if (trace) trace.push({clause: clause, label: label, cols: ctxs.length ? Object.keys(dispRows(ctxs, 1)[0] || {}) : [], rows: dispRows(ctxs, CAP), total: ctxs.length});
@@ -2786,12 +2906,57 @@ function execute(q, db, trace){
   return {cols: outCols, rows: outRows};
 }
 
+function executeTop(q, db, trace){
+  var effDb = db;
+  if (q.ctes){
+    effDb = {}; Object.keys(db).forEach(function(k){ effDb[k] = db[k]; });
+    q.ctes.forEach(function(c){ effDb[c.name] = executeTop(c.query, effDb, null).rows; });
+  }
+  if (!q.setOps) return executeCore(q, effDb, trace);
+  var acc = executeCore(q.first, effDb, null);
+  var cols = acc.cols, rows = acc.rows;
+  var keyOf = function(row){ return JSON.stringify(cols.map(function(c){ return row[c] === undefined ? null : row[c]; })); };
+  q.setOps.forEach(function(o){
+    var r = executeCore(o.core, effDb, null).rows;
+    var rkeys = {}; r.forEach(function(row){ rkeys[keyOf(row)] = 1; });
+    if (o.op === 'UNION' && o.all){ rows = rows.concat(r); }
+    else if (o.op === 'UNION'){
+      var seen = {}, out = [];
+      rows.concat(r).forEach(function(row){ var k = keyOf(row); if (!seen[k]){ seen[k] = 1; out.push(row); } });
+      rows = out;
+    }
+    else if (o.op === 'INTERSECT'){
+      var seen2 = {}, out2 = [];
+      rows.forEach(function(row){ var k = keyOf(row); if (rkeys[k] && !seen2[k]){ seen2[k] = 1; out2.push(row); } });
+      rows = out2;
+    }
+    else if (o.op === 'EXCEPT'){
+      var seen3 = {}, out3 = [];
+      rows.forEach(function(row){ var k = keyOf(row); if (!rkeys[k] && !seen3[k]){ seen3[k] = 1; out3.push(row); } });
+      rows = out3;
+    }
+    if (trace) trace.push({clause: 'set', label: o.op + (o.all ? ' ALL' : ''), cols: cols, rows: rows.slice(0, 15), total: rows.length});
+  });
+  if (q.orderBy){
+    rows = sortRows(rows, q.orderBy, function(t, r){
+      if (t.expr.type === 'col' && !t.expr.table && Object.prototype.hasOwnProperty.call(r, t.expr.name)) return r[t.expr.name];
+      return evalExpr(t.expr, r, null);
+    });
+    if (trace) trace.push({clause: 'order', label: 'ORDER BY', cols: cols, rows: rows.slice(0, 15), total: rows.length});
+  }
+  if (q.limit !== undefined){
+    rows = rows.slice(q.offset || 0, (q.offset || 0) + q.limit);
+    if (trace) trace.push({clause: 'limit', label: 'LIMIT ' + q.limit, cols: cols, rows: rows.slice(0, 15), total: rows.length});
+  }
+  return {cols: cols, rows: rows};
+}
+
 function runSQL(sql, db){
   try {
     var p = new Parser(tokenize(sql));
     var q = p.parseQuery();
     if (!p.eof()) throw new Error('Unexpected extra text at the end of the query');
-    var res = execute(q, db, null);
+    var res = executeTop(q, db, null);
     return {ok: true, cols: res.cols, rows: res.rows, error: null};
   } catch (e){ return {ok: false, cols: [], rows: [], error: e.message}; }
 }
@@ -2801,7 +2966,7 @@ function traceSQL(sql, db){
     var q = p.parseQuery();
     if (!p.eof()) throw new Error('Unexpected extra text at the end of the query');
     var trace = [];
-    var res = execute(q, db, trace);
+    var res = executeTop(q, db, trace);
     return {ok: true, stages: trace, cols: res.cols, rows: res.rows, error: null};
   } catch (e){ return {ok: false, stages: [], cols: [], rows: [], error: e.message}; }
 }
