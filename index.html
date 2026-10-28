@@ -28,6 +28,19 @@ button{font-family:inherit; cursor:pointer}
 .tracktoggle button.active-java{background:var(--accent-java); color:#fff}
 .unithead{font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:1.2px; color:var(--muted); margin:10px 2px}
 .pathcard{display:flex; gap:14px; align-items:center; width:100%; text-align:left; background:var(--card); border:2px solid var(--line); border-radius:18px; padding:16px; margin-bottom:12px; font-size:16px; color:var(--ink)}
+.cards{display:flex; flex-direction:column}
+.cards .pathcard{margin-bottom:12px}
+@media (min-width: 820px){
+  #app{max-width:1040px; padding:26px 30px 64px}
+  .cards{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+  .cards .pathcard{margin-bottom:0; height:100%}
+  .editor{min-height:320px}
+  .card{padding:22px}
+}
+@media (min-width: 1240px){
+  #app{max-width:1180px}
+  .cards{grid-template-columns:1fr 1fr 1fr}
+}
 .pathcard:not(:disabled){border-bottom-width:4px}
 .pathcard:disabled{opacity:.45}
 .pathcard .icon{font-size:30px}
@@ -1993,7 +2006,7 @@ function openLesson(coll, id, stage){
        stepIdx: 0, selected: -1, checked: false, wasCorrect: false,
        placed: [], scrambled: scramble(L.parsons.lines),
        buildCode: null, buildResult: null, buildFails: 0, showHint: false, showSolution: false,
-       solutionSeen: false, studyMode: false, parsonsFails: 0, coldCleared: false,
+       solutionSeen: false, studyMode: false, parsonsFails: 0, coldCleared: false, orders: {},
        shapeDone: !L.build.shapeQ, shapeMsg: '', shapeGood: false,
        needVerdict: false, verdictDone: !L.build.verdictQ, verdictMsg: '', verdictGood: false,
        xpAtStart: state.xp.drills + state.xp.fundamentals + state.xp.rapid,
@@ -2004,13 +2017,23 @@ function firstOpenStage(coll, id){
   for (var i = 0; i < EXERCISES.length; i++) if (!exDone(coll, id, EXERCISES[i])) return EXERCISES[i] === 'predict' ? 'teach' : EXERCISES[i];
   return 'teach';
 }
+function shuffledIdx(n){
+  var a = []; for (var i = 0; i < n; i++) a.push(i);
+  for (var j = a.length - 1; j > 0; j--){ var k = Math.floor(Math.random() * (j + 1)); var t = a[j]; a[j] = a[k]; a[k] = t; }
+  return a;
+}
+function permFor(key, n){
+  /* One stable shuffle per question per session: re-renders and retries keep the
+     same layout; a fresh lesson visit reshuffles. */
+  S.orders = S.orders || {};
+  if (!S.orders[key]) S.orders[key] = shuffledIdx(n);
+  return S.orders[key];
+}
 function scramble(lines){
   var idx = lines.map(function(_, i){ return i; });
   if (idx.length < 2) return idx;
-  var out = idx.slice(1).concat(idx[0]);
-  if (out.join() === idx.join()) out = idx.slice().reverse();
-  if (out.length > 2){ var t = out[0]; out[0] = out[out.length - 1]; out[out.length - 1] = t; }
-  if (out.join() === idx.join()) out = idx.slice().reverse();
+  var out = shuffledIdx(idx.length), guard = 0;
+  while (out.join() === idx.join() && guard++ < 12) out = shuffledIdx(idx.length);
   return out;
 }
 function elapsedStr(){
@@ -2052,7 +2075,7 @@ function headerHtml(){
 }
 function sectionHtml(coll){
   var C = COLLECTIONS[coll];
-  var h = '<div class="unithead">' + C.title + '</div><p class="note" style="margin:-4px 2px 10px">' + escHtml(C.sub) + '</p>';
+  var h = '<div class="unithead">' + C.title + '</div><p class="note" style="margin:-4px 2px 10px">' + escHtml(C.sub) + '</p><div class="cards">';
   C.lessons.forEach(function(L, i){
     var un = unlocked(coll, i), comp = lessonComplete(coll, L.id);
     var doneCount = EXERCISES.filter(function(k){ return exDone(coll, L.id, k); }).length;
@@ -2061,6 +2084,7 @@ function sectionHtml(coll){
       '<div class="icon">' + L.icon + '</div><div><div class="t">' + (i + 1) + '. ' + escHtml(L.title) + '</div>' +
       '<div class="s">' + escHtml(L.tagline) + (L.target ? ' · ⏱ target ' + L.target : '') + (coldPending(coll, L.id) ? ' · ❄️ cold recheck due' : '') + '</div></div><div class="dots">' + dots + '</div></button>';
   });
+  h += '</div>';
   var total = C.lessons.length * 4;
   var doneTotal = C.lessons.reduce(function(n, L){ return n + EXERCISES.filter(function(k){ return exDone(coll, L.id, k); }).length; }, 0);
   h += '<div class="progressbar"><div style="width:' + Math.round(doneTotal / total * 100) + '%"></div></div>';
@@ -2069,13 +2093,14 @@ function sectionHtml(coll){
 var RAPID_RUN = 12, RAPID_SECONDS = 10;
 function rapidDeck(id){ for (var i = 0; i < RAPID_DECKS.length; i++) if (RAPID_DECKS[i].id === id) return RAPID_DECKS[i]; return null; }
 function rapidSectionHtml(){
-  var h = '<div class="unithead">⚡ Rapid Fire — Operator Fluency</div><p class="note" style="margin:-4px 2px 10px">' + RAPID_RUN + ' cards, ' + RAPID_SECONDS + ' seconds each, shuffled every run. Wrong answers land in your review queue.</p>';
+  var h = '<div class="unithead">⚡ Rapid Fire — Operator Fluency</div><p class="note" style="margin:-4px 2px 10px">' + RAPID_RUN + ' cards, ' + RAPID_SECONDS + ' seconds each, shuffled every run. Wrong answers land in your review queue.</p><div class="cards">';
   RAPID_DECKS.forEach(function(D){
     var best = state.rapid.best[D.id] || 0, plays = state.rapid.plays[D.id] || 0;
     h += '<button class="pathcard" onclick="H.rapidStart(\'' + D.id + '\')">' +
       '<div class="icon">' + D.icon + '</div><div><div class="t">' + escHtml(D.title) + '</div>' +
       '<div class="s">' + escHtml(D.tagline) + '</div></div><div class="dots">' + (plays ? '🏆 best ' + best + ' / ' + RAPID_RUN + ' · ' + plays + ' run' + (plays === 1 ? '' : 's') : '▶ Start') + '</div></button>';
   });
+  h += '</div>';
   return h;
 }
 function viewHome(){
@@ -2139,13 +2164,14 @@ function viewTeach(L){
   h += nextStageBtn('Start: Predict →', 'predict');
   return h + '</div>';
 }
-function choiceBtns(q){
-  return q.choices.map(function(ch, i){
+function choiceBtns(q, key){
+  var perm = permFor(key, q.choices.length);
+  return perm.map(function(origIdx, dispIdx){
     var cls = '';
-    if (S.checked && i === q.answer) cls = 'correct';
-    else if (S.checked && i === S.selected) cls = 'wrong';
-    else if (i === S.selected) cls = 'selected';
-    return '<button class="choice ' + cls + '" onclick="H.pick(' + i + ')">' + escHtml(ch) + '</button>';
+    if (S.checked && origIdx === q.answer) cls = 'correct';
+    else if (S.checked && dispIdx === S.selected) cls = 'wrong';
+    else if (dispIdx === S.selected) cls = 'selected';
+    return '<button class="choice ' + cls + '" onclick="H.pick(' + dispIdx + ')">' + escHtml(q.choices[origIdx]) + '</button>';
   }).join('');
 }
 function feedbackHtml(good, why){
@@ -2155,7 +2181,7 @@ function viewPredict(L){
   var q = L.predict;
   var h = '<div class="card"><h3 style="margin-top:0">🔮 Predict' + (q.crash ? ' — one of these traps is live' : '') + '</h3>' +
     '<p>Read the code and commit to an answer <i>before</i> anything runs. Guessing first is what makes it stick.</p>' +
-    codeBlock(q.code) + '<p><b>' + escHtml(q.question) + '</b></p>' + choiceBtns(q);
+    codeBlock(q.code) + '<p><b>' + escHtml(q.question) + '</b></p>' + choiceBtns(q, S.coll + ':' + L.id + ':predict');
   if (!S.checked) h += '<button class="btn" ' + (S.selected < 0 ? 'disabled' : '') + ' onclick="H.checkChoice(\'predict\')">Check answer</button>';
   else {
     h += feedbackHtml(S.wasCorrect, q.why);
@@ -2177,7 +2203,7 @@ function viewStep(L){
     '<button class="btn" ' + (S.stepIdx >= st.steps.length - 1 ? 'disabled' : '') + ' onclick="H.stepMove(1)">Step →</button></div>';
   if (S.stepIdx >= st.steps.length - 1){
     var q = st.finalQ;
-    h += '<h3>Check yourself</h3><p><b>' + escHtml(q.question) + '</b></p>' + choiceBtns(q);
+    h += '<h3>Check yourself</h3><p><b>' + escHtml(q.question) + '</b></p>' + choiceBtns(q, S.coll + ':' + L.id + ':step');
     if (!S.checked) h += '<button class="btn" ' + (S.selected < 0 ? 'disabled' : '') + ' onclick="H.checkChoice(\'step\')">Check answer</button>';
     else {
       h += feedbackHtml(S.wasCorrect, q.why);
@@ -2209,8 +2235,9 @@ function viewParsons(L){
 function gateHtml(kind, q, msg, good){
   var h = '<div class="card" style="border-color:var(--amber)"><h3 style="margin-top:0">' + (kind === 'shape' ? '🔎 Shape check — before you code' : '🧾 Verdict check — from your printed numbers only') + '</h3>' +
     '<p><b>' + escHtml(q.question) + '</b></p>';
-  h += q.choices.map(function(ch, i){
-    return '<button class="choice" onclick="H.gatePick(\'' + kind + '\',' + i + ')">' + escHtml(ch) + '</button>';
+  var perm = permFor(S.coll + ':' + S.conceptId + ':gate:' + kind, q.choices.length);
+  h += perm.map(function(origIdx, dispIdx){
+    return '<button class="choice" onclick="H.gatePick(\'' + kind + '\',' + dispIdx + ')">' + escHtml(q.choices[origIdx]) + '</button>';
   }).join('');
   if (msg) h += '<div class="feedback ' + (good ? 'good' : 'bad') + '">' + escHtml(msg) + '</div>';
   return h + '</div>';
@@ -2301,12 +2328,12 @@ function viewRapid(){
   h += '<div class="note">Card ' + (S.pos + 1) + ' of ' + S.order.length + ' · ⭐ score ' + S.score + (S.streak > 1 ? ' · 🔥 streak ' + S.streak : '') + ' · <span id="cdText">' + RAPID_SECONDS.toFixed(1) + 's</span></div>';
   h += '<div class="progressbar"><div id="cdBar" style="width:100%"></div></div>';
   h += '<div class="card">' + codeBlock(card.code) + '<p><b>' + escHtml(card.q) + '</b></p>';
-  h += card.choices.map(function(ch, i){
+  h += (S.cardPerm || card.choices.map(function(_, i){ return i; })).map(function(origIdx, dispIdx){
     var cls = '';
-    if (S.checked && i === card.answer) cls = 'correct';
-    else if (S.checked && i === S.selected) cls = 'wrong';
-    else if (i === S.selected) cls = 'selected';
-    return '<button class="choice ' + cls + '" ' + (S.checked ? 'disabled' : '') + ' onclick="H.rapidPick(' + i + ')">' + escHtml(ch) + '</button>';
+    if (S.checked && origIdx === card.answer) cls = 'correct';
+    else if (S.checked && dispIdx === S.selected) cls = 'wrong';
+    else if (dispIdx === S.selected) cls = 'selected';
+    return '<button class="choice ' + cls + '" ' + (S.checked ? 'disabled' : '') + ' onclick="H.rapidPick(' + dispIdx + ')">' + escHtml(card.choices[origIdx]) + '</button>';
   }).join('');
   if (S.checked){
     h += feedbackHtml(S.wasCorrect, (S.timedOut ? '⏰ Time. ' : '') + card.why);
@@ -2333,12 +2360,13 @@ window.H = {
          score: 0, streak: 0, bestStreak: 0, earned: 0,
          selected: -1, checked: false, wasCorrect: false, timedOut: false, finished: false,
          deadline: Date.now() + RAPID_SECONDS * 1000, startedAt: Date.now()};
+    S.cardPerm = shuffledIdx(D.cards[S.order[0]].choices.length);
     render(); window.scrollTo(0, 0);
   },
   rapidPick: function(i){
     if (S.checked || S.finished) return;
     var D = rapidDeck(S.deckId); var card = D.cards[S.order[S.pos]];
-    S.selected = i; S.checked = true; S.wasCorrect = i === card.answer;
+    S.selected = i; S.checked = true; S.wasCorrect = (S.cardPerm ? S.cardPerm[i] : i) === card.answer;
     if (S.wasCorrect){
       S.score++; S.streak++; if (S.streak > S.bestStreak) S.bestStreak = S.streak;
       S.earned += XP_PER; state.xp.rapid += XP_PER; save();
@@ -2361,6 +2389,7 @@ window.H = {
     } else {
       S.pos++; S.selected = -1; S.checked = false; S.wasCorrect = false; S.timedOut = false;
       S.deadline = Date.now() + RAPID_SECONDS * 1000;
+      var D = rapidDeck(S.deckId); S.cardPerm = shuffledIdx(D.cards[S.order[S.pos]].choices.length);
     }
     render(); window.scrollTo(0, 0);
   },
@@ -2376,7 +2405,8 @@ window.H = {
   checkChoice: function(kind){
     var L = lessonById(S.coll, S.conceptId);
     var q = kind === 'predict' ? L.predict : L.step.finalQ;
-    S.checked = true; S.wasCorrect = S.selected === q.answer;
+    var perm = permFor(S.coll + ':' + L.id + ':' + kind, q.choices.length);
+    S.checked = true; S.wasCorrect = S.selected >= 0 && perm[S.selected] === q.answer;
     if (S.wasCorrect) completeExercise(S.coll, L.id, kind);
     else recordMistake(S.coll, L.id, kind);
     render();
@@ -2384,7 +2414,8 @@ window.H = {
   gatePick: function(kind, i){
     var L = lessonById(S.coll, S.conceptId);
     var q = kind === 'shape' ? L.build.shapeQ : L.build.verdictQ;
-    if (i === q.answer){
+    var perm = permFor(S.coll + ':' + L.id + ':gate:' + kind, q.choices.length);
+    if (perm[i] === q.answer){
       if (kind === 'shape'){ S.shapeDone = true; S.shapeGood = true; S.shapeMsg = 'Correct — ' + q.why; }
       else { S.verdictDone = true; S.verdictGood = true; S.verdictMsg = 'Correct — ' + q.why; completeExercise(S.coll, L.id, 'build', S.solutionSeen); }
     } else {
