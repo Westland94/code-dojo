@@ -890,7 +890,10 @@ if (typeof module !== 'undefined' && module.exports) module.exports = {RAPID_DEC
    small commerce side (orders + order_items) for join/grain work.
    Lesson shape mirrors the drills (teach/predict/step/parsons/build) with
    sql: true; step is the visual query stepper (engine trace), and every
-   Build carries a grain shape-check before the editor unlocks. */
+   Build carries a grain shape-check before the editor unlocks.
+   HOUSE RULE (Andrew, 2026-10-28): every stage teaches the same principle on
+   a DIFFERENT example. No earlier stage's query may produce the Build's
+   result — enforced by an execution check in tests/test_sql_lessons.js. */
 var SQL_DB = {
   users: [
     {id: 'u1', name: 'Ana', tier: 'pro'},
@@ -946,8 +949,8 @@ var SQL_LESSONS = [
       'reason = NULL matches nothing. The test is reason IS NULL.',
       'Successful events in this dataset carry reason = NULL by design — the same nulls-by-design from the Python drills.'
     ],
-    query: 'SELECT id, user_id, reason\nFROM events\nWHERE ok = false\nORDER BY id',
-    note: 'Five rows survive: every failed login. Note the successful logins are invisible here — and that their NULL reasons would fail any `reason = ...` test you wrote.'
+    query: 'SELECT id, user_id, day\nFROM events\nWHERE ok = true AND day = \'Tue\'\nORDER BY id',
+    note: 'Two rows survive: the successful logins on Tuesday (events 3 and 5). AND means both conditions must hold for the same row — event 4 is Tuesday but failed, event 1 succeeded but on Monday.'
   },
   predict: {
     code: 'SELECT COUNT(*) AS n\nFROM events\nWHERE ok = false AND reason = \'locked\'',
@@ -957,24 +960,24 @@ var SQL_LESSONS = [
     why: 'Failed logins with reason locked: events 6 and 9. n = 2. COUNT(*) counts surviving rows — WHERE did the filtering first.'
   },
   step: {
-    query: 'SELECT id, user_id\nFROM events\nWHERE user_id = \'u1\' AND ok = true\nORDER BY id',
+    query: 'SELECT id, day, ok\nFROM events\nWHERE user_id = \'u2\'\nORDER BY id',
     notes: {
       from: 'FROM loads all 10 events. Nothing filtered yet — this is the raw table.',
-      where: 'WHERE keeps rows where BOTH conditions are true: u1\u2019s successful events — ids 1, 3, 8. 10 rows in, 3 out.',
-      select: 'SELECT projects just the two columns asked for. Same 3 rows, narrower.',
+      where: 'WHERE keeps only u2\u2019s rows: events 2, 5 and 9 — one failure, one success, one failure. 10 rows in, 3 out.',
+      select: 'SELECT projects just the columns asked for. Same 3 rows, narrower.',
       order: 'ORDER BY id sorts the survivors. Sorting is presentation — it never changes WHICH rows you have.'
     },
     finalQ: {
       question: 'After the WHERE stage, how many rows remain?',
       choices: ['10', '3', '5', '2'],
       answer: 1,
-      why: 'u1 has three successful events (ids 1, 3, 8). WHERE is where the 10 became 3 — SELECT and ORDER BY never change the count.'
+      why: 'Ben (u2) has exactly three events: ids 2, 5, 9. WHERE is where the 10 became 3 — SELECT and ORDER BY never change the count.'
     }
   },
   parsons: {
-    prompt: 'Rebuild the query: every failed login (id, user_id, reason), oldest first.',
-    lines: ['SELECT id, user_id, reason', 'FROM events', 'WHERE ok = false', 'ORDER BY id'],
-    expected: ['5 rows — events 2, 4, 6, 9, 10']
+    prompt: 'Rebuild the query: every event that happened on Wednesday (id, user_id, ok), oldest first.',
+    lines: ['SELECT id, user_id, ok', 'FROM events', 'WHERE day = \'Wed\'', 'ORDER BY id'],
+    expected: ['3 rows — events 6, 7, 8']
   },
   build: {
     prompt: 'List every failed login: id, user_id and reason, oldest first (by id).',
@@ -1020,13 +1023,13 @@ var SQL_LESSONS = [
     why: 'The join produces one row per item row: 8. Order 101 contributes 2, order 105 contributes 2, and order 106 (no items) contributes 0.'
   },
   step: {
-    query: 'SELECT o.id AS oid, SUM(i.qty * i.price) AS rev\nFROM orders o\nJOIN order_items i ON i.order_id = o.id\nGROUP BY o.id\nORDER BY rev DESC',
+    query: 'SELECT o.id AS oid, COUNT(*) AS items\nFROM orders o\nJOIN order_items i ON i.order_id = o.id\nGROUP BY o.id\nORDER BY o.id',
     notes: {
       from: 'FROM loads the 7 orders.',
       join: 'JOIN matches items to orders: 8 rows now — one per item. Grain: item. Order 106 is gone; orders 101 and 105 appear twice.',
-      group: 'GROUP BY o.id collapses the 8 item rows back into 6 order buckets. Grain restored: one row per order-that-has-items.',
-      select: 'SELECT computes SUM(qty * price) inside each bucket — the revenue of that order.',
-      order: 'ORDER BY rev DESC puts the biggest order (103, revenue 99) on top.'
+      group: 'GROUP BY o.id collapses the 8 item rows into 6 order buckets. Grain restored: one row per order-that-has-items.',
+      select: 'SELECT counts the rows inside each bucket: orders 101 and 105 hold 2 items each, the rest hold 1.',
+      order: 'ORDER BY o.id lines the orders up numerically.'
     },
     finalQ: {
       question: 'Right after the JOIN stage, how many rows are there — and what is one row?',
@@ -1036,9 +1039,9 @@ var SQL_LESSONS = [
     }
   },
   parsons: {
-    prompt: 'Rebuild the query: revenue per order (orders with items only).',
-    lines: ['SELECT o.id AS oid, SUM(i.qty * i.price) AS rev', 'FROM orders o', 'JOIN order_items i ON i.order_id = o.id', 'GROUP BY o.id', 'ORDER BY rev DESC'],
-    expected: ['6 rows — order 103 on top with 99']
+    prompt: 'Rebuild the query: total units (sum of qty) per order, for orders that have items.',
+    lines: ['SELECT o.id AS oid, SUM(i.qty) AS units', 'FROM orders o', 'JOIN order_items i ON i.order_id = o.id', 'GROUP BY o.id', 'ORDER BY o.id'],
+    expected: ['6 rows — order 101 leads with 3 units']
   },
   build: {
     prompt: 'For each order that has items, show the order id (as oid) and its total revenue (as rev) — revenue is SUM(qty * price) over its items. Biggest revenue first.',
@@ -1065,41 +1068,42 @@ var SQL_LESSONS = [
   teach: {
     body: 'GROUP BY is the bucket pattern from the Python drills, wearing SQL clothes. Rows pour into buckets keyed by the grouping column; aggregates (COUNT, SUM, AVG) then read each bucket. One row comes out per bucket — the grain becomes "one row per group".\n\nTwo filters, two different moments: WHERE filters ROWS before bucketing. HAVING filters BUCKETS after the aggregates exist. "Users with at least 3 events" is a HAVING question — you cannot know the count until the bucket is full.',
     points: [
-      'GROUP BY user_id on events makes 5 buckets — and the per-bucket counts must sum back to 10, the row total. Always sum-check.',
+      'GROUP BY day on events makes 4 buckets — and the per-bucket counts must sum back to 10, the row total. Always sum-check.',
       'WHERE runs before grouping (rows), HAVING runs after (buckets).',
       'COUNT(*) counts rows in the bucket; COUNT(reason) counts non-NULL reasons in the bucket — different numbers, both honest.',
       'After GROUP BY, plain columns in SELECT must be the grouping keys or aggregates — everything else is ambiguous.'
     ],
-    query: 'SELECT user_id, COUNT(*) AS n\nFROM events\nGROUP BY user_id\nORDER BY n DESC, user_id',
-    note: 'u1 and u2 tie at 3 events each. The tie-break (user_id) makes the output deterministic — without it, tied rows can come back in any order.'
+    query: 'SELECT day, COUNT(*) AS n\nFROM events\nGROUP BY day\nORDER BY day',
+    note: 'Mon 2, Tue 3, Wed 3, Thu 2 — and 2 + 3 + 3 + 2 = 10, the whole table. If your bucket counts do not sum to the input rows, a filter upstream ate some.'
   },
   predict: {
-    code: 'SELECT user_id, COUNT(*) AS n\nFROM events\nGROUP BY user_id\nHAVING COUNT(*) >= 3',
+    code: 'SELECT reason, COUNT(*) AS n\nFROM events\nWHERE ok = false\nGROUP BY reason',
     question: 'How many rows does this return?',
-    choices: ['5', '2', '3', '0'],
+    choices: ['5', '2', '3', '1'],
     answer: 1,
-    why: 'Buckets: u1=3, u2=3, u3=2, u4=1, u5=1. HAVING keeps the two buckets with count >= 3.'
+    why: 'Failed events bucket by reason: bad_password (3 events) and locked (2 events). Two buckets, two rows. The counts sum to 5 — all the failures.'
   },
   step: {
-    query: 'SELECT user_id, COUNT(*) AS n\nFROM events\nGROUP BY user_id\nHAVING COUNT(*) >= 3\nORDER BY user_id',
+    query: 'SELECT user_id, COUNT(*) AS n\nFROM events\nWHERE ok = false\nGROUP BY user_id\nHAVING COUNT(*) >= 2\nORDER BY user_id',
     notes: {
       from: 'FROM loads all 10 events.',
-      group: 'GROUP BY user_id sorts rows into 5 buckets: u1 has 3, u2 has 3, u3 has 2, u4 has 1, u5 has 1. The counts sum to 10 — the whole table is accounted for.',
-      having: 'HAVING filters BUCKETS: only u1 and u2 have COUNT(*) >= 3. Three buckets are discarded whole.',
-      select: 'SELECT reads one row per surviving bucket.',
-      order: 'ORDER BY user_id: u1, then u2.'
+      where: 'WHERE ok = false keeps only the 5 failed logins. Filtering happens BEFORE bucketing — the buckets will only ever see failures.',
+      group: 'GROUP BY user_id makes 4 failure buckets: u2 has 2, and u3, u4, u5 have 1 each. The counts sum to 5 — every failure is in exactly one bucket.',
+      having: 'HAVING COUNT(*) >= 2 filters BUCKETS: only u2\u2019s bucket is big enough. Three buckets are discarded whole.',
+      select: 'SELECT reads the one surviving bucket.',
+      order: 'ORDER BY user_id — trivial with a single row, but the habit keeps output deterministic.'
     },
     finalQ: {
-      question: 'Why can\u2019t the ">= 3 events" filter go in a WHERE clause?',
-      choices: ['WHERE runs before the buckets exist, so there is no count yet', 'WHERE cannot use numbers', 'WHERE only works on strings', 'It can — WHERE and HAVING are identical'],
+      question: 'How many buckets survive the HAVING stage?',
+      choices: ['1', '2', '4', '5'],
       answer: 0,
-      why: 'WHERE filters individual rows before grouping. The count is a property of the finished bucket — that is exactly what HAVING is for.'
+      why: 'Only u2 failed twice. HAVING filters finished buckets — u3, u4 and u5 each failed once, so their buckets are dropped whole.'
     }
   },
   parsons: {
-    prompt: 'Rebuild the query: event counts per user, only users with at least 3 events.',
-    lines: ['SELECT user_id, COUNT(*) AS n', 'FROM events', 'GROUP BY user_id', 'HAVING COUNT(*) >= 3', 'ORDER BY user_id'],
-    expected: ['2 rows — u1 and u2']
+    prompt: 'Rebuild the query: successful-login counts per user (only users who have at least one).',
+    lines: ['SELECT user_id, COUNT(*) AS n', 'FROM events', 'WHERE ok = true', 'GROUP BY user_id', 'ORDER BY user_id'],
+    expected: ['3 rows — u1 has 3, u2 and u3 have 1 each']
   },
   build: {
     prompt: 'Show the users with at least 3 events: user_id and their event count (as n). Most events first; break ties by user_id so the order is stable.',
@@ -1123,15 +1127,15 @@ var SQL_LESSONS = [
   tagline: 'ROW_NUMBER numbers rows inside each group without collapsing them.',
   target: '6 min',
   teach: {
-    body: 'GROUP BY collapses. Window functions do not: they compute a value for each row while looking at a WINDOW of related rows. ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id DESC) numbers each user\u2019s events 1, 2, 3… — restarting per user, latest first. The row with rn = 1 is that user\u2019s latest event.\n\nThe catch: you cannot filter on a window result in the same query\u2019s WHERE (WHERE runs before windows exist). So the pattern is two stories: number the rows in a subquery, then filter rn = 1 outside. This "latest per group" pattern is one of the most-asked SQL questions in data engineering interviews, full stop.',
+    body: 'GROUP BY collapses. Window functions do not: they compute a value for each row while looking at a WINDOW of related rows. ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id ASC) numbers each user\u2019s events 1, 2, 3… — restarting per user, EARLIEST first. The row with rn = 1 is that user\u2019s first event. Flip the inner ordering to DESC and rn = 1 becomes the latest — the ordering you choose defines what "number 1" means.\n\nThe catch: you cannot filter on a window result in the same query\u2019s WHERE (WHERE runs before windows exist). So the pattern is two stories: number the rows in a subquery, then filter rn = 1 outside. This "one-per-group" pattern is one of the most-asked SQL questions in data engineering interviews, full stop.',
     points: [
       'PARTITION BY restarts the numbering per group; ORDER BY inside OVER decides who is #1.',
       'Window functions keep every row — unlike GROUP BY, nothing collapses.',
       'Filter rn = 1 in an OUTER query: the subquery numbers, the outer query picks.',
-      'Latest means "greatest by your ordering" — here highest id. In real tables that is usually a timestamp, and ties need a tie-break.'
+      '"First" and "latest" are the same pattern with opposite orderings — in real tables the ordering key is usually a timestamp, and ties need a tie-break.'
     ],
-    query: 'SELECT user_id, id\nFROM (\n  SELECT user_id, id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id DESC) AS rn\n  FROM events\n) t\nWHERE rn = 1\nORDER BY user_id',
-    note: 'u1\u2019s latest event is 8, u2\u2019s is 9, u3\u2019s is 7, u4\u2019s is 6, u5\u2019s is 10. Same answer the Python "Latest Per Key" drill produced — SQL just says it in one statement.'
+    query: 'SELECT user_id, id\nFROM (\n  SELECT user_id, id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id ASC) AS rn\n  FROM events\n) t\nWHERE rn = 1\nORDER BY user_id',
+    note: 'With ASC ordering, rn = 1 is each user\u2019s FIRST event: u1 → 1, u2 → 2, u3 → 4, u4 → 6, u5 → 10. Same skeleton as latest-per-group — only the inner ORDER BY direction differs.'
   },
   predict: {
     code: 'SELECT id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id DESC) AS rn\nFROM events',
@@ -1141,29 +1145,29 @@ var SQL_LESSONS = [
     why: 'Event 8 is u1\u2019s highest-id event — inside u1\u2019s partition, ordered by id DESC, it is first. rn = 1.'
   },
   step: {
-    query: 'SELECT user_id, id\nFROM (\n  SELECT user_id, id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id DESC) AS rn\n  FROM events\n) t\nWHERE rn = 1\nORDER BY user_id',
+    query: 'SELECT user_id, id\nFROM (\n  SELECT user_id, id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id ASC) AS rn\n  FROM events\n) t\nWHERE rn = 1\nORDER BY user_id',
     notes: {
-      from: 'The subquery runs FIRST: it numbers all 10 events within their user (u1: 8→1, 3→2, 1→3). FROM receives those 10 numbered rows as table t.',
-      where: 'WHERE rn = 1 keeps exactly one row per user — the latest. 10 rows become 5.',
+      from: 'The subquery runs FIRST: it numbers all 10 events within their user, earliest first (u1: 1→1, 3→2, 8→3). FROM receives those 10 numbered rows as table t.',
+      where: 'WHERE rn = 1 keeps exactly one row per user — the earliest. 10 rows become 5.',
       select: 'SELECT keeps user_id and id.',
-      order: 'ORDER BY user_id lines the five winners up.'
+      order: 'ORDER BY user_id lines the five firsts up.'
     },
     finalQ: {
       question: 'How many rows survive WHERE rn = 1?',
       choices: ['10', '1', '5', '3'],
       answer: 2,
-      why: 'One per user, and there are 5 users. If your latest-per-group query returns more rows than there are groups, the pattern leaked.'
+      why: 'One per user, and there are 5 users. If your one-per-group query returns more rows than there are groups, the pattern leaked.'
     }
   },
   parsons: {
-    prompt: 'Rebuild the INNER query: every event, numbered within its user, latest first.',
-    lines: ['SELECT user_id, id,', 'ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id DESC) AS rn', 'FROM events'],
+    prompt: 'Rebuild the INNER query: every event, numbered within its user, earliest first.',
+    lines: ['SELECT user_id, id,', 'ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id ASC) AS rn', 'FROM events'],
     expected: ['10 rows — every event with its rn']
   },
   build: {
     prompt: 'Find the latest event for each user: user_id and the event id, ordered by user_id.',
     starter: 'SELECT user_id, id\nFROM (\n  SELECT user_id, id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id DESC) AS rn\n  FROM events\n) t\nWHERE ',
-    hint: 'The starter already numbers the rows. Outside, keep only rn = 1 and order by user_id.',
+    hint: 'The starter already numbers the rows latest-first. Outside, keep only rn = 1 and order by user_id.',
     solution: 'SELECT user_id, id\nFROM (\n  SELECT user_id, id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id DESC) AS rn\n  FROM events\n) t\nWHERE rn = 1\nORDER BY user_id',
     checks: [{type: 'result', ordered: true, expected: [
       {user_id: 'u1', id: 8}, {user_id: 'u2', id: 9}, {user_id: 'u3', id: 7},
@@ -1201,24 +1205,23 @@ var SQL_LESSONS = [
     why: 'Both orders total 35, so both hold rank 1. RANK shares ties — "top 1" returns 2 rows. This is the tie trap, live.'
   },
   step: {
-    query: 'SELECT user_id, id, total\nFROM (\n  SELECT user_id, id, total, RANK() OVER (PARTITION BY user_id ORDER BY total DESC) AS rk\n  FROM orders\n) t\nWHERE rk <= 2\nORDER BY user_id, total DESC',
+    query: 'SELECT id, total, RANK() OVER (ORDER BY total DESC) AS rk\nFROM orders\nORDER BY rk',
     notes: {
-      from: 'The subquery ranks every order inside its user: u1 gets 70→1, 50→2, 20→3; u3\u2019s two 35s both get 1.',
-      where: 'WHERE rk <= 2 keeps the top two ranks per user. u1 keeps 2 rows, u3 keeps both tied rows, u2 and u4 keep their single orders.',
-      select: 'SELECT drops the rk helper column.',
-      order: 'ORDER BY user_id, total DESC presents each user\u2019s best first.'
+      from: 'FROM loads all 7 orders.',
+      select: 'No PARTITION BY this time — the ranking runs over the WHOLE table. Totals sort 99, 70, 50, then the two 35s TIE at rank 4, and the next rank skips to 6.',
+      order: 'ORDER BY rk presents the leaderboard: 103 first (99), 107 second (70), 101 third (50).'
     },
     finalQ: {
-      question: 'RANK() and ROW_NUMBER() differ exactly when…',
-      choices: ['Two rows tie — RANK shares the rank, ROW_NUMBER still hands out unique numbers', 'The table has more than 10 rows', 'You use DESC instead of ASC', 'Never — they are synonyms'],
+      question: 'What rank does the order with total 50 get?',
+      choices: ['3', '2', '4', '5'],
       answer: 0,
-      why: 'Ties. Everything else about the two functions is the same machinery — the tie policy is the whole difference.'
+      why: 'Two orders beat it (99 and 70), so it is rank 3. The tie at 35 affects ranks BELOW it — rank 5 is skipped entirely.'
     }
   },
   parsons: {
-    prompt: 'Rebuild the INNER query: every order, ranked inside its user by total, biggest first.',
-    lines: ['SELECT user_id, id, total,', 'RANK() OVER (PARTITION BY user_id ORDER BY total DESC) AS rk', 'FROM orders'],
-    expected: ['7 rows — every order with its rk']
+    prompt: 'Rebuild the INNER query: every order, ranked inside its STATUS group by total, biggest first.',
+    lines: ['SELECT user_id, id, total,', 'RANK() OVER (PARTITION BY status ORDER BY total DESC) AS rk', 'FROM orders'],
+    expected: ['7 rows — every order with its rk inside its status']
   },
   build: {
     prompt: 'Show the top 2 orders per user by total, including ties: user_id, order id, and total. Order by user_id, then total descending.',
@@ -1245,15 +1248,15 @@ var SQL_LESSONS = [
   tagline: 'LEFT JOIN + IS NULL: the rows with no match are the answer.',
   target: '6 min',
   teach: {
-    body: 'Sometimes the question is about absence: users who never ordered, orders with no items, customers who never logged in. An inner JOIN cannot answer it — it deletes exactly the rows you are looking for.\n\nThe anti-join pattern: LEFT JOIN keeps every left row; where the right side has no match, its columns come back NULL. Filter WHERE right_key IS NULL and only the orphans remain. Two clauses, one idea: keep everything, then keep only the empties.',
+    body: 'Sometimes the question is about absence: orders that never got items, users who never ordered, customers who never logged in. An inner JOIN cannot answer it — it deletes exactly the rows you are looking for.\n\nThe anti-join pattern: LEFT JOIN keeps every left row; where the right side has no match, its columns come back NULL. Filter WHERE right_key IS NULL and only the orphans remain. Two clauses, one idea: keep everything, then keep only the empties.',
     points: [
       'LEFT JOIN never drops a left row. Unmatched right columns arrive as NULL.',
-      'WHERE o.id IS NULL after LEFT JOIN orders = "users with no orders" — the anti-join.',
+      'WHERE right_key IS NULL after a LEFT JOIN = "left rows with no match" — the anti-join.',
       'DISTINCT collapses fully-duplicate rows; it does NOT pick a winner per key. Dedup-per-key is the window pattern from lesson 4.',
       'The IS NULL goes on a right-table key that can never be NULL in a real match (a primary key) — otherwise matched rows with NULL data sneak in.'
     ],
-    query: 'SELECT u.name, u.tier\nFROM users u\nLEFT JOIN orders o ON o.user_id = u.id\nWHERE o.id IS NULL',
-    note: 'One row: Ed, pro — a paying-tier user who has never ordered. That is a business question ("who do we nudge?") answered by absence.'
+    query: 'SELECT o.id, o.user_id, o.total\nFROM orders o\nLEFT JOIN order_items i ON i.order_id = o.id\nWHERE i.order_id IS NULL',
+    note: 'One row: order 106 — Di\u2019s order, placed but never given any items. An operations team would read that as a stuck fulfillment.'
   },
   predict: {
     code: 'SELECT COUNT(*) AS n\nFROM users u\nLEFT JOIN orders o ON o.user_id = u.id\nWHERE o.id IS NULL',
@@ -1263,24 +1266,24 @@ var SQL_LESSONS = [
     why: 'u1, u2, u3, u4 all have orders. Only u5 (Ed) has none — n = 1.'
   },
   step: {
-    query: 'SELECT u.name\nFROM users u\nLEFT JOIN orders o ON o.user_id = u.id\nWHERE o.id IS NULL',
+    query: 'SELECT o.id\nFROM orders o\nLEFT JOIN order_items i ON i.order_id = o.id\nWHERE i.order_id IS NULL',
     notes: {
-      from: 'FROM loads the 5 users.',
-      join: 'LEFT JOIN attaches orders: u1 appears 3 times (3 orders), u3 twice, u2 and u4 once — and u5 once, with NULL in every orders column. 8 rows.',
-      where: 'WHERE o.id IS NULL keeps only the row whose order side is empty: u5. 8 rows become 1.',
-      select: 'SELECT keeps just the name: Ed.'
+      from: 'FROM loads the 7 orders.',
+      join: 'LEFT JOIN attaches items: orders with items appear once per item (8 matched rows), and order 106 appears once with NULL in every item column. 9 rows total.',
+      where: 'WHERE i.order_id IS NULL keeps only the row whose item side is empty: order 106. 9 rows become 1.',
+      select: 'SELECT keeps just the id: 106.'
     },
     finalQ: {
       question: 'Right after the LEFT JOIN stage, how many rows are there?',
-      choices: ['5', '7', '8', '1'],
+      choices: ['7', '8', '9', '1'],
       answer: 2,
-      why: 'Every order matched to its user (7) plus one NULL-padded row for the orderless user = 8. LEFT JOIN preserves the left side — that is the whole point.'
+      why: 'Every item matched to its order (8) plus one NULL-padded row for the itemless order = 9. LEFT JOIN preserves the left side — that is the whole point.'
     }
   },
   parsons: {
-    prompt: 'Rebuild the query: users who have never placed an order.',
-    lines: ['SELECT u.name, u.tier', 'FROM users u', 'LEFT JOIN orders o ON o.user_id = u.id', 'WHERE o.id IS NULL'],
-    expected: ['1 row — Ed, pro']
+    prompt: 'Rebuild the query: orders that have no items (id and total).',
+    lines: ['SELECT o.id, o.total', 'FROM orders o', 'LEFT JOIN order_items i ON i.order_id = o.id', 'WHERE i.order_id IS NULL'],
+    expected: ['1 row — order 106, total 10']
   },
   build: {
     prompt: 'Find the pro-tier users who have never placed an order: name and tier, alphabetical by name.',
@@ -1324,13 +1327,13 @@ var SQL_LESSONS = [
   step: {
     query: 'WITH numbered AS (\n  SELECT user_id, id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id DESC) AS rn\n  FROM events\n)\nSELECT user_id, id\nFROM numbered\nWHERE rn = 1\nORDER BY user_id',
     notes: {
-      from: 'FROM reads the CTE \u201cnumbered\u201d — the subquery from lesson 4, now with a name. 10 rows, each carrying its rn.',
+      from: 'FROM reads the CTE "numbered" — the subquery from lesson 4, now with a name. 10 rows, each carrying its rn.',
       where: 'WHERE rn = 1 keeps each user\u2019s latest event: 5 rows. The CTE numbered; the outer query picks.',
       select: 'SELECT drops the rn helper column.',
       order: 'ORDER BY user_id presents the five winners in user order.'
     },
     finalQ: {
-      question: 'The CTE named \u201cnumbered\u201d contains…',
+      question: 'The CTE named "numbered" contains…',
       choices: ['All 10 events, each with its rn — filtering happens outside', 'Only the 5 latest events', 'One row per user, already grouped', 'A permanent new table in the database'],
       answer: 0,
       why: 'A CTE is just a named intermediate result. numbered holds every event with its number; WHERE rn = 1 does the picking. And nothing is saved — the CTE exists only for this query.'
