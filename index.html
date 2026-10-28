@@ -79,6 +79,15 @@ textarea.editor{width:100%; min-height:190px; background:var(--code-bg); color:v
 .foottools{display:flex; gap:8px; flex-wrap:wrap; margin-top:20px}
 .foottools button{background:#fff; border:2px solid var(--line); border-radius:10px; padding:9px 13px; font-weight:700; font-size:13.5px; color:var(--ink)}
 .warn{background:#fef2f2; border:1.5px solid var(--red); border-radius:12px; padding:11px 13px; font-size:14px; line-height:1.5; margin-bottom:14px}
+.locate{background:#eef4ff; border:1.5px solid var(--accent-py); border-radius:12px; padding:11px 13px; font-size:14.5px; line-height:1.5; margin-top:12px}
+.locate-t{font-weight:800; margin-bottom:6px}
+.vs{display:flex; gap:10px; flex-wrap:wrap}
+.vsbox{flex:1; min-width:150px}
+.vsbox .outbox{margin:4px 0}
+.goalbox{border:1.5px solid var(--green)}
+.qline{background:#fff; border-radius:8px; padding:8px 10px; margin:6px 0 2px}
+.stripwrap{background:#f8fafc; border:1.5px solid var(--line); border-radius:12px; padding:11px 13px; margin-top:12px}
+.strip{margin:4px 0 0 18px; padding:0; font-size:14.5px; line-height:1.55}
 .backbtn{background:none; border:0; font-size:15.5px; font-weight:800; color:var(--muted); padding:6px 0}
 .bigemoji{font-size:52px; text-align:center; margin:8px 0}
 .center{text-align:center}
@@ -1840,7 +1849,7 @@ var storageOK = true;
 function lsGet(){ try { return localStorage.getItem(KEY); } catch (e){ storageOK = false; return null; } }
 function lsSet(v){ try { localStorage.setItem(KEY, v); } catch (e){ storageOK = false; } }
 function defaultState(){
-  return {v: 2, xp: {drills: 0, fundamentals: 0, rapid: 0}, done: {drills: {}, fundamentals: {}}, rapid: {plays: {}, best: {}}, mistakes: [], streak: {last: '', count: 0}};
+  return {v: 2, xp: {drills: 0, fundamentals: 0, rapid: 0}, done: {drills: {}, fundamentals: {}}, rapid: {plays: {}, best: {}}, mistakes: [], streak: {last: '', count: 0}, helped: {}};
 }
 function migrate(s){
   if (!s) return defaultState();
@@ -1850,6 +1859,7 @@ function migrate(s){
     d.done = Object.assign(d.done, s.done || {});
     if (s.rapid){ d.rapid.plays = Object.assign(d.rapid.plays, s.rapid.plays || {}); d.rapid.best = Object.assign(d.rapid.best, s.rapid.best || {}); }
     d.mistakes = s.mistakes || []; d.streak = s.streak || d.streak;
+    d.helped = (s.helped && typeof s.helped === 'object') ? s.helped : {};
     return d;
   }
   if (s.v === 1){ // v1 dual-track save: keep Python fundamentals, drop Java
@@ -1893,14 +1903,82 @@ function doneMap(coll, id){ if (!state.done[coll][id]) state.done[coll][id] = {}
 function exDone(coll, id, kind){ return !!doneMap(coll, id)[kind]; }
 function lessonComplete(coll, id){ return EXERCISES.every(function(k){ return exDone(coll, id, k); }); }
 function unlocked(coll, idx){ if (idx === 0) return true; return lessonComplete(coll, lessonsOf(coll)[idx - 1].id); }
-function completeExercise(coll, id, kind){
+function completeExercise(coll, id, kind, helped){
+  if (helped && kind === 'build'){
+    state.helped[coll + ':' + id] = true;
+    queueColdRecheck(coll, id);
+  }
   var m = doneMap(coll, id);
-  if (!m[kind]){ m[kind] = true; state.xp[coll] += XP_PER; save(); }
+  if (!m[kind]){ m[kind] = true; state.xp[coll] += XP_PER; }
+  save();
 }
 function recordMistake(coll, id, kind){
   state.mistakes.push({coll: coll, concept: id, kind: kind, when: todayStr()});
   if (state.mistakes.length > 200) state.mistakes = state.mistakes.slice(-200);
   save();
+}
+function queueColdRecheck(coll, id){
+  state.mistakes = state.mistakes.filter(function(m){ return !(m.cold && m.coll === coll && m.concept === id); });
+  state.mistakes.push({coll: coll, concept: id, kind: 'build', when: todayStr(), cold: true, due: Date.now() + 24 * 3600 * 1000});
+  if (state.mistakes.length > 200) state.mistakes = state.mistakes.slice(-200);
+}
+function coldPending(coll, id){
+  return state.mistakes.some(function(m){ return m.cold && m.coll === coll && m.concept === id; });
+}
+function onBuildPassed(){
+  /* A cold recheck clears only when the code passed WITHOUT the solution being seen this session. */
+  if (S.solutionSeen || !coldPending(S.coll, S.conceptId)) return;
+  state.mistakes = state.mistakes.filter(function(m){ return !(m.cold && m.coll === S.coll && m.concept === S.conceptId); });
+  S.coldCleared = true; save();
+}
+function divergenceFor(r, b){
+  /* Locates the FIRST place the learner's run diverges from the goal, and pairs it
+     with one connecting question. Pure, testable. */
+  if (!r.ok) return {kind: 'error',
+    text: 'Your program stopped on an error (shown above) before it could finish.',
+    question: 'Read the error as a sentence — it names a line and a problem. What is that line trying to do?'};
+  for (var i = 0; i < b.checks.length; i++){
+    var chk = b.checks[i];
+    if (chk.type === 'output'){
+      var exp = chk.expected, act = r.output;
+      if (JSON.stringify(act) === JSON.stringify(exp)) continue;
+      var n = Math.min(exp.length, act.length);
+      for (var j = 0; j < n; j++){
+        if (act[j] !== exp[j]) return {kind: 'line', goalLines: exp,
+          text: 'Output line ' + (j + 1) + ': you printed ' + JSON.stringify(act[j]) + ', the goal prints ' + JSON.stringify(exp[j]) + '. Everything before that line matches.',
+          question: 'Which line of YOUR code decides what gets printed on output line ' + (j + 1) + ' — and what value flows into it there?'};
+      }
+      if (act.length < exp.length) return {kind: 'missing', goalLines: exp,
+        text: 'Your output stops after line ' + act.length + '. The goal\u2019s next line (' + (act.length + 1) + ') is ' + JSON.stringify(exp[act.length]) + '.',
+        question: 'What condition or loop boundary in your code ends things before that line gets printed?'};
+      return {kind: 'extra', goalLines: exp,
+        text: 'Every goal line matches — then you print an extra line ' + (exp.length + 1) + ': ' + JSON.stringify(act[exp.length]) + '.',
+        question: 'Which loop or print in your code runs one time too many?'};
+    }
+    if (chk.type === 'var'){
+      if (JSON.stringify(r.globals[chk.name]) !== JSON.stringify(chk.expected))
+        return {kind: 'var',
+          text: 'The variable ' + chk.name + ' ends as ' + fmtVal(r.globals[chk.name]) + '; the goal is ' + fmtVal(chk.expected) + '.',
+          question: 'Trace the LAST assignment to ' + chk.name + ' in your code: what does it compute, step by step?'};
+    }
+  }
+  return null;
+}
+function divergeHtml(r){
+  var d = r.diverge; if (!d) return '';
+  var h = '<div class="locate"><div class="locate-t">📍 Where you are vs where you\u2019re going</div>';
+  if (d.goalLines){
+    h += '<div class="vs"><div class="vsbox"><div class="area-label">Your output</div><div class="outbox">' + (r.output.length ? escHtml(r.output.join('\n')) : ' ') + '</div></div>' +
+      '<div class="vsbox"><div class="area-label">Goal output</div><div class="outbox goalbox">' + escHtml(d.goalLines.join('\n')) + '</div></div></div>';
+  }
+  h += '<p style="margin:8px 0 4px"><b>First divergence:</b> ' + escHtml(d.text) + '</p>';
+  h += '<p class="qline">💬 Ask yourself: ' + escHtml(d.question) + '</p></div>';
+  return h;
+}
+function movesHtml(L){
+  return '<div class="stripwrap"><div class="locate-t">🧭 The moves this build needs</div><ol class="strip">' +
+    L.teach.points.map(function(p){ return '<li>' + escHtml(p) + '</li>'; }).join('') +
+    '</ol><p class="note" style="margin:6px 0 0">Walk your code top to bottom against this list: which move is missing — or happening in the wrong order?</p></div>';
 }
 
 /* ---------- session ---------- */
@@ -1915,6 +1993,7 @@ function openLesson(coll, id, stage){
        stepIdx: 0, selected: -1, checked: false, wasCorrect: false,
        placed: [], scrambled: scramble(L.parsons.lines),
        buildCode: null, buildResult: null, buildFails: 0, showHint: false, showSolution: false,
+       solutionSeen: false, studyMode: false, parsonsFails: 0, coldCleared: false,
        shapeDone: !L.build.shapeQ, shapeMsg: '', shapeGood: false,
        needVerdict: false, verdictDone: !L.build.verdictQ, verdictMsg: '', verdictGood: false,
        xpAtStart: state.xp.drills + state.xp.fundamentals + state.xp.rapid,
@@ -1980,7 +2059,7 @@ function sectionHtml(coll){
     var dots = comp ? '✅ Done' : (un ? doneCount + ' / 4 done' : '🔒 Locked');
     h += '<button class="pathcard' + (comp ? ' done' : '') + '" ' + (un ? 'onclick="H.open(\'' + coll + '\',\'' + L.id + '\')"' : 'disabled') + '>' +
       '<div class="icon">' + L.icon + '</div><div><div class="t">' + (i + 1) + '. ' + escHtml(L.title) + '</div>' +
-      '<div class="s">' + escHtml(L.tagline) + (L.target ? ' · ⏱ target ' + L.target : '') + '</div></div><div class="dots">' + dots + '</div></button>';
+      '<div class="s">' + escHtml(L.tagline) + (L.target ? ' · ⏱ target ' + L.target : '') + (coldPending(coll, L.id) ? ' · ❄️ cold recheck due' : '') + '</div></div><div class="dots">' + dots + '</div></button>';
   });
   var total = C.lessons.length * 4;
   var doneTotal = C.lessons.reduce(function(n, L){ return n + EXERCISES.filter(function(k){ return exDone(coll, L.id, k); }).length; }, 0);
@@ -2007,6 +2086,7 @@ function viewHome(){
   h += sectionHtml('fundamentals');
   h += '<div class="card"><h3 style="margin-top:0">How a drill works</h3>' +
     '<p>Predict → step through → rebuild → build, at interview pace. Every drill Build makes you pass two habit gates: a <b>shape check</b> before the editor unlocks (name the set, check the shape), and a <b>verdict check</b> after a passing run — you may only claim what your program printed.</p>' +
+    '<p>Stuck on a Build? Help escalates in rungs: first <b>located feedback</b> (your output vs the goal, the first divergence, one question), then the <b>moves list</b>, then — after 3 tries — a <b>guided solution study</b>. Anything finished with help comes back as a ❄️ cold recheck the next day; passing it unaided is what banks it.</p>' +
     (state.mistakes.length ? '<p class="note"><a href="#" onclick="H.review();return false;">' + state.mistakes.length + ' mistake' + (state.mistakes.length === 1 ? '' : 's') + ' logged for review</a></p>' : '') + '</div>';
   h += '<div class="foottools">' +
     '<button onclick="H.exportProgress()">⬇️ Export progress</button>' +
@@ -2138,15 +2218,20 @@ function gateHtml(kind, q, msg, good){
 function viewBuild(L){
   var b = L.build;
   if (b.shapeQ && !S.shapeDone) return gateHtml('shape', b.shapeQ, S.shapeMsg, S.shapeGood);
+  if (S.studyMode){
+    return '<div class="card" style="border-color:var(--amber)"><h3 style="margin-top:0">📖 Study the solution</h3>' +
+      '<p>Don\u2019t copy it. For each block, say <b>why</b> it is there and what would break without it. When the idea is yours, hide this and rebuild from the starter — from the idea, not from memory of the text.</p>' +
+      '<div class="code-label">Solution</div>' + codeBlock(b.solution) + movesHtml(L) +
+      '<button class="btn" style="margin-top:12px" onclick="H.rebuildSelf()">I\u2019ve got the idea — rebuild it myself</button></div>';
+  }
   var h = '<div class="card"><h3 style="margin-top:0">⌨️ Build it</h3>';
   if (b.shapeQ && S.shapeMsg) h += '<div class="feedback good" style="margin:0 0 12px">🔎 ' + escHtml(S.shapeMsg) + '</div>';
+  if (S.solutionSeen) h += '<div class="feedback" style="margin:0 0 12px;border-color:var(--amber)">📖 You studied the solution — this pass is the rebuild. It counts when it\u2019s written by you, and this lesson comes back cold tomorrow.</div>';
   h += '<p>' + escHtml(b.prompt) + '</p>' +
     '<textarea class="editor" id="editor" spellcheck="false" autocapitalize="off" autocomplete="off">' + escHtml(S.buildCode === null ? b.starter : S.buildCode) + '</textarea>';
   h += '<div class="btnrow"><button class="btn" onclick="H.runBuild()">▶ Run & check</button>' +
     '<button class="btn secondary" onclick="H.toggleHint()">' + (S.showHint ? 'Hide hint' : '💡 Hint') + '</button></div>';
   if (S.showHint) h += '<div class="stepnote" style="margin-top:12px">' + escHtml(b.hint) + '</div>';
-  if (S.buildFails >= 2 && !S.showSolution) h += '<button class="btn secondary" style="margin-top:10px" onclick="H.showSolution()">Show solution</button>';
-  if (S.showSolution) h += '<div class="code-label" style="margin-top:14px">Solution</div>' + codeBlock(b.solution);
   if (S.buildResult){
     var r = S.buildResult;
     h += '<div class="area-label">Your output</div><div class="outbox">' + (r.output.length ? escHtml(r.output.join('\n')) : ' ') + '</div>';
@@ -2154,7 +2239,10 @@ function viewBuild(L){
     if (r.checks) h += r.checks.map(function(ch){
       return '<div class="checkline">' + (ch.pass ? '✅' : '❌') + ' ' + escHtml(ch.label) + '</div>';
     }).join('');
-    if (r.allPass && !S.needVerdict) h += '<div class="feedback good">✅ All checks passed. That one is yours — you wrote it.</div>' + nextStageBtn('Finish lesson 🎉', 'done');
+    if (!r.allPass && r.diverge) h += divergeHtml(r);
+    if (!r.allPass && S.buildFails >= 2) h += movesHtml(L);
+    if (!r.allPass && S.buildFails >= 3 && !S.solutionSeen) h += '<button class="btn secondary" style="margin-top:10px" onclick="H.studySolution()">📖 Study the solution</button>';
+    if (r.allPass && !S.needVerdict) h += '<div class="feedback good">' + (S.solutionSeen ? '✅ Passed — written by you after studying the solution. This lesson comes back cold tomorrow: that unaided rep is the one that banks it.' : '✅ All checks passed. That one is yours — you wrote it.') + (S.coldCleared ? '<br>❄️ Cold recheck cleared — you just did that one unaided.' : '') + '</div>' + nextStageBtn('Finish lesson 🎉', 'done');
     if (r.allPass && S.needVerdict) h += '<div class="feedback good">✅ Code passes. One gate left: the verdict.</div>';
   }
   h += '</div>';
@@ -2168,7 +2256,8 @@ function viewDone(L){
   var ls = lessonsOf(S.coll); var idx = ls.indexOf(L);
   var earnedNow = (state.xp.drills + state.xp.fundamentals + state.xp.rapid) - (S.xpAtStart || 0);
   var h = '<div class="card center"><div class="bigemoji">🎉</div><h2>Lesson complete!</h2>' +
-    '<p>' + (earnedNow > 0 ? 'You earned ' + earnedNow + ' XP' : 'Already banked — no new XP for a redo') + ' in <b>' + escHtml(COLLECTIONS[S.coll].title) + '</b> for <b>' + escHtml(L.title) + '</b> — in ' + elapsedStr() + (L.target ? ' (target ' + L.target + ')' : '') + '.</p>';
+    '<p>' + (earnedNow > 0 ? 'You earned ' + earnedNow + ' XP' : 'Already banked — no new XP for a redo') + ' in <b>' + escHtml(COLLECTIONS[S.coll].title) + '</b> for <b>' + escHtml(L.title) + '</b> — in ' + elapsedStr() + (L.target ? ' (target ' + L.target + ')' : '') + '.</p>' +
+    (state.helped[S.coll + ':' + L.id] ? '<p class="note">📖 This Build was finished after a solution study, so it is queued as a ❄️ cold recheck for tomorrow. Passing it cold — no peeking — is what banks it.</p>' : '');
   if (idx + 1 < ls.length) h += '<button class="btn" onclick="H.open(\'' + S.coll + '\',\'' + ls[idx + 1].id + '\')">Next lesson: ' + escHtml(ls[idx + 1].title) + ' →</button>';
   h += '<button class="btn secondary" onclick="H.home()">Back to path</button></div>';
   return h;
@@ -2179,10 +2268,16 @@ function viewReview(){
   if (!state.mistakes.length) h += '<p class="note">Nothing logged yet. Clean slate.</p>';
   var seen = {};
   state.mistakes.slice().reverse().forEach(function(m){
-    var key = m.coll + m.concept + m.kind; if (seen[key]) return; seen[key] = 1;
+    var key = m.coll + m.concept + m.kind + (m.cold ? ':cold' : ''); if (seen[key]) return; seen[key] = 1;
     var title = null, kindLabel = m.kind;
     if (m.coll === 'rapid'){ var D = rapidDeck(m.concept); if (!D) return; title = D.title + ' (Rapid Fire)'; kindLabel = 'missed card'; }
     else { var L = lessonById(m.coll, m.concept); if (!L) return; title = L.title; }
+    if (m.cold){
+      var dueTxt = m.due ? new Date(m.due).toLocaleDateString() : '';
+      h += '<div class="checkline">❄️ <b>Cold recheck</b> — ' + escHtml(title) + ' (Build)' + (dueTxt ? ' · comes back ' + escHtml(dueTxt) : '') + ' — pass it with no peeking to bank it ' +
+        '<a href="#" onclick="H.openFromReview(\'' + m.coll + '\',\'' + m.concept + '\',\'build\');return false;">redo →</a></div>';
+      return;
+    }
     h += '<div class="checkline">❌ ' + escHtml(title) + ' — ' + escHtml(kindLabel) + ' (' + escHtml(m.when) + ') ' +
       '<a href="#" onclick="H.openFromReview(\'' + m.coll + '\',\'' + m.concept + '\',\'' + m.kind + '\');return false;">redo →</a></div>';
   });
@@ -2291,7 +2386,7 @@ window.H = {
     var q = kind === 'shape' ? L.build.shapeQ : L.build.verdictQ;
     if (i === q.answer){
       if (kind === 'shape'){ S.shapeDone = true; S.shapeGood = true; S.shapeMsg = 'Correct — ' + q.why; }
-      else { S.verdictDone = true; S.verdictGood = true; S.verdictMsg = 'Correct — ' + q.why; completeExercise(S.coll, L.id, 'build'); }
+      else { S.verdictDone = true; S.verdictGood = true; S.verdictMsg = 'Correct — ' + q.why; completeExercise(S.coll, L.id, 'build', S.solutionSeen); }
     } else {
       if (kind === 'shape'){ S.shapeGood = false; S.shapeMsg = 'Not yet. ' + q.why; }
       else { S.verdictGood = false; S.verdictMsg = 'That verdict outruns your printed numbers. ' + q.why; }
@@ -2310,9 +2405,10 @@ window.H = {
       S.parsonsGood = true; S.parsonsMsg = '✅ Exactly right — and it runs, producing: ' + p.expected.join(' · ');
       completeExercise(S.coll, L.id, 'parsons');
     } else {
-      S.parsonsGood = false;
+      S.parsonsGood = false; S.parsonsFails++;
       var firstWrong = 0; while (firstWrong < got.length && got[firstWrong] === firstWrong) firstWrong++;
       S.parsonsMsg = '❌ Not yet — the first line in the wrong place is line ' + (firstWrong + 1) + ' of your program. Think about what has to exist before it can be used.';
+      if (S.parsonsFails >= 2) S.parsonsMsg += ' Ask yourself: does every line only use values created by the lines ABOVE it? Find the first line that reaches for something not yet built.';
       recordMistake(S.coll, L.id, 'parsons');
     }
     render();
@@ -2321,9 +2417,14 @@ window.H = {
     var ta = document.getElementById('editor'); if (ta) S.buildCode = ta.value;
     S.showHint = !S.showHint; render();
   },
-  showSolution: function(){
+  studySolution: function(){
     var ta = document.getElementById('editor'); if (ta) S.buildCode = ta.value;
-    S.showSolution = true; render();
+    S.solutionSeen = true; S.studyMode = true; render(); window.scrollTo(0, 0);
+  },
+  rebuildSelf: function(){
+    var L = lessonById(S.coll, S.conceptId);
+    S.studyMode = false; S.buildCode = L.build.starter; S.buildResult = null;
+    render(); window.scrollTo(0, 0);
   },
   runBuild: function(){
     var ta = document.getElementById('editor'); if (!ta) return;
@@ -2333,7 +2434,7 @@ window.H = {
     var checks = [];
     if (!r.ok){
       checks.push({pass: false, label: 'Program runs without errors'});
-      S.buildResult = {output: r.output, error: r.error, checks: checks, allPass: false};
+      S.buildResult = {output: r.output, error: r.error, checks: checks, allPass: false, diverge: divergenceFor(r, b)};
       S.buildFails++; recordMistake(S.coll, L.id, 'build');
     } else {
       var allPass = true;
@@ -2348,10 +2449,11 @@ window.H = {
           if (!pass) allPass = false;
         }
       });
-      S.buildResult = {output: r.output, error: null, checks: checks, allPass: allPass};
+      S.buildResult = {output: r.output, error: null, checks: checks, allPass: allPass, diverge: allPass ? null : divergenceFor(r, b)};
       if (allPass){
+        onBuildPassed();
         if (b.verdictQ){ S.needVerdict = true; }
-        else completeExercise(S.coll, L.id, 'build');
+        else completeExercise(S.coll, L.id, 'build', S.solutionSeen);
       } else { S.buildFails++; recordMistake(S.coll, L.id, 'build'); }
     }
     render();
