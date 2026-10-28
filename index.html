@@ -117,6 +117,15 @@ button.chip{font-family:inherit; border:0}
 .chip.nav{cursor:pointer}
 .chip.nav:hover{filter:brightness(.95)}
 
+/* Java arm (CSCI-241) */
+.qrow{display:flex; gap:12px; align-items:center; width:100%; text-align:left; background:var(--card); border:2px solid var(--line); border-radius:14px; padding:12px 14px; margin-bottom:8px; font-size:15px; color:var(--ink)}
+.qrow:disabled{opacity:.5}
+.qrow .qn{font-weight:800; min-width:26px}
+.qrow .qt{flex:1}
+.qrow .qt .s{color:var(--muted); font-size:12px; margin-top:2px}
+.tagchip{display:inline-block; background:var(--bg); border:1px solid var(--line); border-radius:999px; padding:1px 8px; font-size:11px; margin-right:4px; color:var(--muted)}
+.prompt{white-space:pre-wrap}
+
 </style>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#101828">
@@ -1446,7 +1455,7 @@ function tokenize(src, lang){
     const three = src.slice(i, i+3), two = src.slice(i, i+2);
     if (three === '**=' ){ toks.push({t:'OP', v:'**='}); i += 3; continue; }
     if (['**','//','==','!=','<=','>=','&&','||','+=','-=','*=','/=','%=','++','--'].includes(two)){ toks.push({t:'OP', v:two}); i += 2; continue; }
-    if ('+-*/%()[]{},:;.=<>!'.includes(c)){ toks.push({t:'OP', v:c}); i++; continue; }
+    if ('+-*/%()[]{},:;.=<>!?'.includes(c)){ toks.push({t:'OP', v:c}); i++; continue; }
     throw new EngineError('Unexpected character: ' + c);
   }
   toks.push({t:'EOF'});
@@ -1473,6 +1482,11 @@ ExprParser.prototype.parse = function(){
     return {k:'Lambda', params, body: this.parse()};
   }
   let e = this.parseOr();
+  if (this.lang === 'java' && this.atOp('?')){
+    this.next(); const thenE = this.parse();
+    this.expectOp(':'); const elsE = this.parse();
+    return {k:'Ternary', e: thenE, cond: e, els: elsE};
+  }
   if (this.lang === 'python' && this.peek().t === 'NAME' && this.peek().v === 'if'){
     this.next(); const cond = this.parseOr();
     const elseTok = this.next();
@@ -1535,6 +1549,12 @@ ExprParser.prototype.parseMul = function(){
   return l;
 };
 ExprParser.prototype.parseUnary = function(){
+  if (this.lang === 'java' && this.atOp('(')){
+    const t1 = this.toks[this.pos + 1], t2 = this.toks[this.pos + 2];
+    if (t1 && t1.t === 'NAME' && ['int','long','double','float','char','boolean','String','short','byte'].includes(t1.v) && t2 && t2.t === 'OP' && t2.v === ')'){
+      this.pos += 3; return {k:'Cast', type: t1.v, e: this.parseUnary()};
+    }
+  }
   if (this.atOp('-')){ this.next(); return {k:'Neg', e: this.parseUnary()}; }
   if (this.atOp('+')){ this.next(); return this.parseUnary(); }
   if (this.atOp('++')){ this.next(); const e = this.parseUnary(); if (e.k !== 'Var') throw new EngineError('++ needs a variable'); return {k:'PreInc', name: e.name}; }
@@ -1590,6 +1610,19 @@ ExprParser.prototype.parseAtom = function(){
   if (p.t === 'STR') return {k:'Str', v: p.v};
   if (p.t === 'FSTR') return {k:'FStr', v: p.v};
   if (p.t === 'NAME'){
+    if (this.lang === 'java' && p.v === 'new'){
+      const typeTok = this.next();
+      if (!typeTok || typeTok.t !== 'NAME') throw new EngineError('Expected a type after new');
+      if (this.atOp('[')){ this.next(); const size = this.parse(); this.expectOp(']'); return {k:'NewArray', type: typeTok.v, size}; }
+      if (this.atOp('(')){
+        this.next(); const nargs = [];
+        if (!this.atOp(')')){ do { nargs.push(this.parse()); } while (this.eatOp(',')); }
+        this.expectOp(')');
+        if (typeTok.v === 'Scanner') return {k:'NewScanner'};
+        return {k:'NewObject', type: typeTok.v, args: nargs};
+      }
+      throw new EngineError('Unsupported use of new');
+    }
     if (p.v === 'True' || p.v === 'true') return {k:'BoolLit', v: true};
     if (p.v === 'False' || p.v === 'false') return {k:'BoolLit', v: false};
     if (p.v === 'None' || p.v === 'null') return {k:'Null'};
@@ -1831,6 +1864,24 @@ function parseJava(src){
       next(); expectOp('('); const cond = parseExpr(); expectOp(')');
       return {k:'While', cond, body: parseBody()};
     }
+    if (atName('do')){
+      next(); const body = parseBody();
+      if (!atName('while')) throw new EngineError('do needs a while (...) after its body');
+      next(); expectOp('('); const cond = parseExpr(); expectOp(')'); expectOp(';');
+      return {k:'DoWhile', cond, body};
+    }
+    if (atName('switch')){
+      next(); expectOp('('); const e = parseExpr(); expectOp(')'); expectOp('{');
+      const cases = []; let cur = null;
+      while (!atOp('}')){
+        if (peek().t === 'EOF') throw new EngineError('Missing closing } in switch');
+        if (atName('case')){ next(); const v = parseExpr(); expectOp(':'); cur = {v, body: []}; cases.push(cur); }
+        else if (atName('default')){ next(); expectOp(':'); cur = {v: null, body: []}; cases.push(cur); }
+        else { if (!cur) throw new EngineError('Statements in a switch need a case label first'); cur.body.push(parseStmt()); }
+      }
+      expectOp('}');
+      return {k:'Switch', e, cases};
+    }
     if (atName('for')){
       next(); expectOp('(');
       let init = null;
@@ -1838,12 +1889,12 @@ function parseJava(src){
         if (isVarDecl()) init = parseVarDecl(true);
         else init = parseSimple();
       }
-      expectOp(';');
-      // for-each: Type name : expr
+      // for-each: Type name : expr (the ':' arrives where a classic for expects ';')
       if (init && init.k === 'VarDecl' && init.e === null && peek().t === 'OP' && peek().v === ':'){
         next(); const iter = parseExpr(); expectOp(')');
         return {k:'ForIn', name: init.name, iter, body: parseBody()};
       }
+      expectOp(';');
       const cond = atOp(';') ? {k:'BoolLit', v:true} : parseExpr();
       expectOp(';');
       const updates = [];
@@ -1854,6 +1905,7 @@ function parseJava(src){
     if (atName('return')){ next(); const e = atOp(';') ? null : parseExpr(); expectOp(';'); return {k:'Return', e}; }
     if (atName('break')){ next(); expectOp(';'); return {k:'Break'}; }
     if (atName('continue')){ next(); expectOp(';'); return {k:'Continue'}; }
+    if (atName('final')){ next(); const d = parseVarDecl(false); expectOp(';'); return d; }
     if (isVarDecl()){ const d = parseVarDecl(false); expectOp(';'); return d; }
     const s = parseSimple(); expectOp(';'); return s;
   }
@@ -1895,6 +1947,7 @@ function parseJava(src){
   }
   const prog = [];
   while (peek().t !== 'EOF'){
+    if (atName('import')){ while (!atOp(';') && peek().t !== 'EOF') next(); eatOp(';'); continue; }
     // skip a class wrapper if the student pasted one: class X { ...stmts... }
     if (atName('class') || (atName('public') && peek(1).v === 'class')){
       JAVA_HAS_MAIN_WRAPPER = true;
@@ -1942,8 +1995,9 @@ function envGet(env, name){
 }
 function envSet(env, name, v){ env.vars[name] = v; }
 
-function runProgram(lang, code){
-  const ctx = {lang, output: [], steps: 0, funcs: {}, maxSteps: 20000, javaTypes: {}};
+function runProgram(lang, code, input){
+  const ctx = {lang, output: [], steps: 0, funcs: {}, maxSteps: 20000, javaTypes: {},
+               inputLines: Array.isArray(input) ? input.map(String) : [], inputPos: 0, inputRest: null, pending: ''};
   try {
     const prog = lang === 'python' ? parsePython(code) : parseJava(code);
     const global = makeEnv(null);
@@ -1955,6 +2009,7 @@ function runProgram(lang, code){
       def.params.forEach(p => envSet(local, p, []));
       try { execBlock(def.body, local, ctx, false); } catch (sig){ if (!(sig instanceof ReturnSignal)) throw sig; }
     }
+    if (ctx.pending){ ctx.output.push(ctx.pending); ctx.pending = ''; }
     const globals = {};
     Object.keys(global.vars).forEach(k => { const v = global.vars[k]; if (v && typeof v === 'object' && v.__fn) return; globals[k] = normalizeVal(v); });
     return {ok: true, output: ctx.output, error: null, globals};
@@ -2011,6 +2066,25 @@ function execStmt(s, env, ctx, isGlobal){
         tick(ctx);
         try { execBlock(s.body, env, ctx, false); }
         catch (e){ if (e instanceof BreakSignal) break; if (e instanceof ContinueSignal) continue; throw e; }
+      }
+      return;
+    }
+    case 'DoWhile': {
+      do {
+        tick(ctx);
+        try { execBlock(s.body, env, ctx, false); }
+        catch (e){ if (e instanceof BreakSignal) break; if (e instanceof ContinueSignal) continue; throw e; }
+      } while (truthy(evalExpr(s.cond, env, ctx)));
+      return;
+    }
+    case 'Switch': {
+      const v = evalExpr(s.e, env, ctx);
+      let start = -1, defIdx = -1;
+      s.cases.forEach((c, i) => { if (c.v === null) defIdx = i; else if (start < 0 && deepEqVal(evalExpr(c.v, env, ctx), v)) start = i; });
+      if (start < 0) start = defIdx;
+      if (start >= 0){
+        try { for (let i = start; i < s.cases.length; i++) execBlock(s.cases[i].body, env, ctx, false); }
+        catch (e){ if (!(e instanceof BreakSignal)) throw e; }
       }
       return;
     }
@@ -2107,9 +2181,17 @@ function exprIsFloat(e, ctx){
     case 'Bin': case 'Cmp': return exprIsFloat(e.l, ctx) || exprIsFloat(e.r, ctx);
     case 'Neg': case 'Not': return exprIsFloat(e.e, ctx);
     case 'Call': return e.fn && e.fn.k === 'Var' && e.fn.name === 'Double.parseDouble';
+    case 'Cast': return e.type === 'double' || e.type === 'float' || exprIsFloat(e.e, ctx);
     case 'Index': return exprIsFloat(e.obj, ctx);
     default: return false;
   }
+}
+function exprIsChar(e, ctx){
+  if (!e) return false;
+  if (e.k === 'Var') return ctx.javaTypes[e.name] === 'char';
+  if (e.k === 'Cast') return e.type === 'char';
+  if (e.k === 'Call' && e.fn && e.fn.k === 'Attr' && e.fn.name === 'charAt') return true;
+  return false;
 }
 function deepEq(a, b){ return deepEqVal(a, b); }
 function evalExpr(e, env, ctx){
@@ -2143,6 +2225,21 @@ function evalExpr(e, env, ctx){
       }
       return out;
     }
+    case 'Cast': {
+      const v = evalExpr(e.e, env, ctx);
+      if (v === null || v === undefined) return null;
+      switch (e.type){
+        case 'int': case 'long': case 'short': case 'byte': return Math.trunc(Number(v));
+        case 'double': case 'float': return Number(v);
+        case 'char': return String.fromCharCode(Math.trunc(Number(typeof v === 'string' && v.length === 1 ? v.charCodeAt(0) : v)) % 65536);
+        case 'String': return stringify(v, ctx.lang);
+        case 'boolean': return truthy(v);
+      }
+      return v;
+    }
+    case 'NewScanner': return {__scanner: true};
+    case 'NewArray': { const n = evalExpr(e.size, env, ctx); if (!(n >= 0) || n > 100000) throw new EngineError('Bad array size'); return new Array(Math.trunc(n)).fill(e.type === 'boolean' ? false : (e.type === 'String' ? null : 0)); }
+    case 'NewObject': throw new EngineError('Creating objects with new ' + e.type + '(...) is not supported yet — classes arrive with Level 2 of the Java track.');
     case 'Neg': return -evalExpr(e.e, env, ctx);
     case 'Not': return !truthy(evalExpr(e.e, env, ctx));
     case 'PreInc': { const v = envGet(env, e.name) + 1; envSet(env, e.name, v); return v; }
@@ -2150,7 +2247,17 @@ function evalExpr(e, env, ctx){
     case 'PostInc': { const v = envGet(env, e.name); envSet(env, e.name, v + 1); return v; }
     case 'PostDec': { const v = envGet(env, e.name); envSet(env, e.name, v - 1); return v; }
     case 'Bin': {
-      const lv = evalExpr(e.l, env, ctx), rv = evalExpr(e.r, env, ctx);
+      let lv = evalExpr(e.l, env, ctx), rv = evalExpr(e.r, env, ctx);
+      if (ctx.lang === 'java' && ['+','-','*','/','%'].includes(e.op)){
+        const lChar = exprIsChar(e.l, ctx), rChar = exprIsChar(e.r, ctx);
+        if (lChar || rChar){
+          const other = lChar ? rv : lv;
+          if (!(e.op === '+' && typeof other === 'string')){
+            if (lChar) lv = String(lv).charCodeAt(0);
+            if (rChar) rv = String(rv).charCodeAt(0);
+          }
+        }
+      }
       if (e.op === '/' && ctx.lang === 'java'){
         if (rv === 0) throw new EngineError('Division by zero');
         if (exprIsFloat(e.l, ctx) || exprIsFloat(e.r, ctx)) return lv / rv;
@@ -2222,12 +2329,15 @@ function evalCall(e, env, ctx){
   const name = fnNode.name;
   const args = () => e.args.map(a => evalExpr(a, env, ctx));
   // variable holding a lambda
-  if (!['print','System.out.println','System.out.print','range','len','str','int','float','Double.parseDouble','Integer.parseInt','abs','Math.abs','Math.max','Math.min','min','max','sorted','sum','set','list','enumerate','zip','reversed','round'].includes(name)){
+  if (!['print','System.out.println','System.out.print','range','len','str','int','float','Double.parseDouble','Integer.parseInt','abs','Math.abs','Math.max','Math.min','Math.round','Math.pow','Math.sqrt','Math.floor','Math.ceil','System.out.printf','min','max','sorted','sum','set','list','enumerate','zip','reversed','round'].includes(name)){
     try { const v = envGet(env, name); if (v && v.__lambda) return callLambda(v, args(), ctx); } catch (err){ /* fall through */ }
   }
   if (name === 'print' || name === 'System.out.println' || name === 'System.out.print'){
     const vals = args();
-    ctx.output.push(vals.map(v => stringify(v, ctx.lang)).join(ctx.lang === 'python' ? ' ' : ''));
+    const text = vals.map(v => stringify(v, ctx.lang)).join(ctx.lang === 'python' ? ' ' : '');
+    if (name === 'System.out.print'){ ctx.pending += text; return null; }
+    ctx.output.push((ctx.pending || '') + text);
+    ctx.pending = '';
     return null;
   }
   if (name === 'range'){
@@ -2263,6 +2373,19 @@ function evalCall(e, env, ctx){
   if (name === 'int'){ const a = args(); return Math.trunc(Number(a[0])); }
   if (name === 'float' || name === 'Double.parseDouble' || name === 'Integer.parseInt'){ const a = args(); return name === 'Integer.parseInt' ? Math.trunc(Number(a[0])) : Number(a[0]); }
   if (name === 'abs' || name === 'Math.abs'){ const a = args(); return Math.abs(a[0]); }
+  if (name === 'System.out.printf'){
+    const a = args();
+    const text = formatPrintf(String(a[0]), a.slice(1), ctx);
+    ctx.pending += text;
+    let nl;
+    while ((nl = ctx.pending.indexOf('\n')) >= 0){ ctx.output.push(ctx.pending.slice(0, nl)); ctx.pending = ctx.pending.slice(nl + 1); }
+    return null;
+  }
+  if (name === 'Math.round'){ const a = args(); return Math.round(a[0]); }
+  if (name === 'Math.pow'){ const a = args(); return Math.pow(a[0], a[1]); }
+  if (name === 'Math.sqrt'){ const a = args(); return Math.sqrt(a[0]); }
+  if (name === 'Math.floor'){ const a = args(); return Math.floor(a[0]); }
+  if (name === 'Math.ceil'){ const a = args(); return Math.ceil(a[0]); }
   if (name === 'Math.max'){ const a = args(); return Math.max.apply(null, a); }
   if (name === 'Math.min'){ const a = args(); return Math.min.apply(null, a); }
   if (name === 'min'){ const a = args(); return Array.isArray(a[0]) ? Math.min.apply(null, a[0]) : Math.min.apply(null, a); }
@@ -2280,8 +2403,45 @@ function evalCall(e, env, ctx){
   }
   throw new EngineError('Unknown function "' + name + '" in v0.1');
 }
+function formatPrintf(fmt, args, ctx){
+  let ai = 0;
+  return fmt.replace(/%(\.\d+)?([dfsn%])/g, (m, prec, spec) => {
+    if (spec === '%') return '%';
+    if (spec === 'n') return '\n';
+    const v = args[ai++];
+    if (v === undefined) throw new EngineError('printf: not enough arguments for the format string');
+    if (spec === 'd') return String(Math.trunc(Number(v)));
+    if (spec === 's') return stringify(v, ctx.lang);
+    if (spec === 'f'){ const digits = prec ? parseInt(prec.slice(1), 10) : 6; return Number(v).toFixed(digits); }
+    return m;
+  });
+}
+function scannerNext(ctx){
+  for (;;){
+    if (ctx.inputRest){
+      const m = /\S+/.exec(ctx.inputRest);
+      if (m){ const t = m[0]; ctx.inputRest = ctx.inputRest.slice(m.index + t.length); return t; }
+      ctx.inputRest = null;
+    }
+    if (ctx.inputPos >= ctx.inputLines.length) throw new EngineError('No more input — the program asked for more values than the question provided.');
+    ctx.inputRest = ctx.inputLines[ctx.inputPos++];
+  }
+}
+function scannerLine(ctx){
+  if (ctx.inputRest !== null && ctx.inputRest !== undefined){ const r = ctx.inputRest; ctx.inputRest = null; return r; }
+  if (ctx.inputPos < ctx.inputLines.length) return ctx.inputLines[ctx.inputPos++];
+  throw new EngineError('No more input — the program asked for more values than the question provided.');
+}
 function callMethod(o, name, args, ctx, kwargs){
   kwargs = kwargs || {};
+  if (o && o.__scanner){
+    if (name === 'nextInt'){ const t = scannerNext(ctx); const n = parseInt(t, 10); if (Number.isNaN(n)) throw new EngineError('Input mismatch: expected an int but the input was "' + t + '"'); return n; }
+    if (name === 'nextDouble'){ const t = scannerNext(ctx); const n = parseFloat(t); if (Number.isNaN(n)) throw new EngineError('Input mismatch: expected a double but the input was "' + t + '"'); return n; }
+    if (name === 'next') return scannerNext(ctx);
+    if (name === 'nextLine') return scannerLine(ctx);
+    if (name === 'nextBoolean'){ const t = scannerNext(ctx).toLowerCase(); if (t === 'true') return true; if (t === 'false') return false; throw new EngineError('Input mismatch: expected true/false but the input was "' + t + '"'); }
+    throw new EngineError('Unsupported Scanner method .' + name + '()');
+  }
   if (o instanceof PyDict){
     if (name === 'get'){ const v = o.get(args[0]); return v === undefined ? (args.length > 1 ? args[1] : null) : v; }
     if (name === 'items') return o.entries.map(e => [e[0], e[1]]);
@@ -2308,6 +2468,13 @@ function callMethod(o, name, args, ctx, kwargs){
     if (name === 'charAt') return o[normIdx(args[0], o.length)];
     if (name === 'substring') return o.slice(args[0], args.length > 1 ? args[1] : undefined);
     if (name === 'contains') return o.includes(String(args[0]));
+    if (name === 'equals') return o === String(args[0]);
+    if (name === 'indexOf') return o.indexOf(String(args[0]));
+    if (name === 'lastIndexOf') return o.lastIndexOf(String(args[0]));
+    if (name === 'startsWith') return o.startsWith(String(args[0]));
+    if (name === 'endsWith') return o.endsWith(String(args[0]));
+    if (name === 'isEmpty') return o.length === 0;
+    if (name === 'compareTo'){ const t = String(args[0]); return o < t ? -1 : (o > t ? 1 : 0); }
     if (name === 'split') return args.length ? o.split(String(args[0])) : o.split(/\s+/);
   }
   if (Array.isArray(o)){
@@ -2984,6 +3151,212 @@ if (typeof window !== 'undefined') window.SQL_ENGINE = API;
 
 </script>
 <script>
+'use strict';
+/* Code Dojo — Java arm (CSCI-241). Level 1 slice: Chapters 1–2.
+   Design: ~/workspace/goals/code-dojo/files/java-arm-design.md (v2).
+   Question shapes:
+     build    — write the program inside main; output checks only (locals
+                inside main are not visible to var checks).
+     trace    — predict what code prints (choices shuffled by the app).
+     classify — name the error kind (syntax / runtime / logic).
+   Every build solution is executed against its own checks by
+   tests/test_java_lessons.js. Anti-leak: worked examples never produce
+   another question's answer. */
+
+function JV(body){ return 'public class Main {\n    public static void main(String[] args) {\n' + body + '\n    }\n}'; }
+function indent(java){ return java.split('\n').map(l => l ? '        ' + l : l).join('\n'); }
+function prog(body){ return JV(indent(body)); }
+
+var JAVA_TAG_INFO = {
+  'fundamentals': {label: 'Programming fundamentals', objective: 'CSCI-241: write, compile, run and debug Java programs; use variables, constants, assignment and expressions.', chapter: 0},
+  'strings': {label: 'Strings & text', objective: 'CSCI-241: use String objects and common string operations.', chapter: 0},
+  'types-conversion': {label: 'Types & conversion', objective: 'CSCI-241: use int, double, boolean and char correctly; convert between types; respect integer division and precision.', chapter: 1},
+  'debugging': {label: 'Testing & debugging', objective: 'CSCI-241: distinguish syntax, runtime and logic errors; test normal, edge, boundary and invalid cases.', chapter: 0}
+};
+
+var JAVA_CHAPTERS = [
+{
+  id: 'java-ch1', n: 1, icon: '👣', title: 'First Steps & Output',
+  sub: 'Programs, variables, and printing — the shape of every Java program you will write this course.',
+  objectives: 'CSCI-241 PF 1–2, 6: write/compile/run; variables & assignment; formatted output basics.',
+  teach: {
+    body: 'Every Java program is a class with a main method; the computer runs main top to bottom, one statement at a time. A statement ends with a semicolon. Variables are labeled boxes with a type: the type is a promise about what fits inside. System.out.println puts a value on its own line; + glues values into one string, working left to right.',
+    points: ['Programs run main top to bottom — order is meaning.', 'Declare with a type once (String name = "Ana";), then use the bare name.', 'println = one value per line; text goes in double quotes.', '+ glues left to right — once text appears, everything after it glues as text.']
+  },
+  questions: [
+    {id: 'j1q1', type: 'build', diff: 'Warm-up', title: 'Say Hello', tags: ['fundamentals'],
+     prompt: 'Print exactly two lines:\nHello, Java!\nCSCI-241, here I come.',
+     starter: prog('// Print the two lines here.'),
+     solution: prog('System.out.println("Hello, Java!");\nSystem.out.println("CSCI-241, here I come.");'),
+     checks: [{type: 'output', lines: ['Hello, Java!', 'CSCI-241, here I come.']}],
+     hint: 'Two statements, one per line of output. Watch the punctuation — it is part of the line.',
+     moves: ['Each println prints exactly one line.', 'Text goes in double quotes; every statement ends with ;'],
+     note: 'println is a vending machine with one job: value in, line out.'},
+    {id: 'j1q2', type: 'build', diff: 'Warm-up', title: 'Course Tag', tags: ['fundamentals', 'strings'],
+     prompt: 'Store the text CSCI-241 in a String variable named course, then print this one line (built from the variable):\nNow loading: CSCI-241',
+     starter: prog('// Declare course, then print the line.'),
+     solution: prog('String course = "CSCI-241";\nSystem.out.println("Now loading: " + course);'),
+     checks: [{type: 'output', lines: ['Now loading: CSCI-241']}],
+     hint: 'The variable holds the text; the print glues "Now loading: " and the variable together with +.',
+     moves: ['Declare once: String course = "CSCI-241";', 'In the print, use the bare name course — no quotes, or you print the word course.'],
+     note: 'Quotes mean "the literal word"; no quotes mean "whatever is in the box."'},
+    {id: 'j1q3', type: 'trace', diff: 'Warm-up', title: 'Print vs Println', tags: ['fundamentals'],
+     code: prog('System.out.print("A");\nSystem.out.println("B");\nSystem.out.print("C");'),
+     question: 'What does this program print?',
+     choices: ['AB on the first line, C on the second', 'A, B and C, each on its own line', 'ABC all on one line', 'A on the first line, BC on the second'],
+     answer: 0,
+     why: 'print leaves the cursor mid-line; println finishes the line. A and B share a line because print("A") never moved down — println("B") printed B and THEN moved down. C starts the new line.',
+     note: 'print parks the cursor; println parks it and pulls the lever for a new line.'},
+    {id: 'j1q4', type: 'build', diff: 'Core', title: 'Level Up', tags: ['fundamentals'],
+     prompt: 'A player\'s score starts at 40. Add 25 points to the score, then print:\nScore: 65\n(computed from the variable — not typed as a fixed number inside the text.)',
+     starter: prog('int score = 40;\n// Add the points, then print.'),
+     solution: prog('int score = 40;\nscore = score + 25;\nSystem.out.println("Score: " + score);'),
+     checks: [{type: 'output', lines: ['Score: 65']}],
+     hint: 'score = score + 25 reads right-to-left: work out the right side with the old value, then store it back.',
+     moves: ['Assignment is not equality: = means "store this in the box".', 'The right side uses the OLD value before the box is updated.'],
+     note: 'In code, = is a moving truck, not a scale: it carries a value into a box.'},
+    {id: 'j1q5', type: 'build', diff: 'Core', title: 'Fixed Seats', tags: ['fundamentals'],
+     prompt: 'A classroom has a constant capacity of 28 seats (declare it as a final int named SEATS). 19 seats are taken (an int named taken). Print:\nSeats left: 9\nThe 9 must be computed inside the print statement.',
+     starter: prog('// Declare SEATS and taken, then print.'),
+     solution: prog('final int SEATS = 28;\nint taken = 19;\nSystem.out.println("Seats left: " + (SEATS - taken));'),
+     checks: [{type: 'output', lines: ['Seats left: 9']}],
+     hint: 'Without parentheses, + glues first and the subtraction never happens as math. Parentheses force the math to happen before the gluing.',
+     moves: ['final makes the value a constant — the compiler forbids changing it.', 'Parentheses outrank +: (SEATS - taken) is computed, then glued.'],
+     note: 'Parentheses are a "do this first" sticky note for the compiler.'},
+    {id: 'j1q6', type: 'trace', diff: 'Core', title: 'The Glue Trap', tags: ['strings', 'fundamentals'],
+     code: prog('System.out.println("Total: " + 3 + 4);\nSystem.out.println("Total: " + (3 + 4));'),
+     question: 'What two lines does this print?',
+     choices: ['Total: 34, then Total: 7', 'Total: 7, then Total: 7', 'Total: 34, then Total: 34', 'Total: 12, then Total: 7'],
+     answer: 0,
+     why: '+ works left to right. Line 1: "Total: " + 3 glues into text first, so the 4 glues as text too — 34. Line 2: the parentheses do the math first — 7.',
+     note: 'Once + touches text, it stops being math and becomes glue — for everything to its right.'},
+    {id: 'j1q7', type: 'build', diff: 'Core', title: 'The Swap', tags: ['fundamentals'],
+     prompt: 'int a holds 5 and int b holds 9. Swap their values (you will need a third variable), then print:\na = 9\nb = 5',
+     starter: prog('int a = 5;\nint b = 9;\n// Swap, then print both lines.'),
+     solution: prog('int a = 5;\nint b = 9;\nint temp = a;\na = b;\nb = temp;\nSystem.out.println("a = " + a);\nSystem.out.println("b = " + b);'),
+     checks: [{type: 'output', lines: ['a = 9', 'b = 5']}],
+     hint: 'a = b overwrites the 5 forever — unless you parked it somewhere first.',
+     moves: ['Park the first value in a temp variable.', 'Then overwrite a, then restore b from temp.'],
+     note: 'Swapping two full glasses needs a third glass. Always.'},
+    {id: 'j1q8', type: 'classify', diff: 'Core', title: 'Name That Error', tags: ['debugging'],
+     code: prog('int count = 0;\nSystem.out.println("Count: " + count)'),
+     question: 'This program never prints anything. What kind of error is stopping it?',
+     choices: ['Syntax (compile) error — the compiler rejects it before anything runs', 'Runtime error — it starts running, then crashes', 'Logic error — it runs fine but prints the wrong thing'],
+     answer: 0,
+     why: 'The statement is missing its semicolon — a grammar violation. The compiler refuses to build the program at all, so nothing runs. Syntax errors are caught earliest and are usually the cheapest to fix.',
+     note: 'Syntax = the grammar police stop you at the door. Runtime = you got in and tripped. Logic = you walked fine, into the wrong room.'},
+    {id: 'j1q9', type: 'build', diff: 'Stretch', title: 'Profile Card', tags: ['fundamentals', 'strings'],
+     prompt: 'Create variables for a student: name (Maya), age (19), city (Chicago) — with the right types. Print the card:\nName: Maya\nAge: 19\nCity: Chicago',
+     starter: prog('// Declare the three variables, then print the card.'),
+     solution: prog('String name = "Maya";\nint age = 19;\nString city = "Chicago";\nSystem.out.println("Name: " + name);\nSystem.out.println("Age: " + age);\nSystem.out.println("City: " + city);'),
+     checks: [{type: 'output', lines: ['Name: Maya', 'Age: 19', 'City: Chicago']}],
+     hint: 'Text values take String, the counting number takes int. Each card line is one println gluing a label to a variable.',
+     moves: ['Pick the type by the value: quoted text → String, whole number → int.', 'One println per line of the card.'],
+     note: 'The type is a promise about what fits in the box — text in String boxes, counts in int boxes.'},
+    {id: 'j1q10', type: 'build', diff: 'Boss', title: 'Register Receipt', tags: ['fundamentals', 'strings'],
+     prompt: 'A register program stores an item name (Notebook), a price in whole dollars (4), and a quantity (3) in variables. Print the receipt:\nItem: Notebook\nQty: 3\nTotal: $12\nThe total must be computed from the price and quantity variables.',
+     starter: prog('// Declare item, price and qty, then print the receipt.'),
+     solution: prog('String item = "Notebook";\nint price = 4;\nint qty = 3;\nSystem.out.println("Item: " + item);\nSystem.out.println("Qty: " + qty);\nSystem.out.println("Total: $" + (price * qty));'),
+     checks: [{type: 'output', lines: ['Item: Notebook', 'Qty: 3', 'Total: $12']}],
+     hint: 'Same parentheses lesson as the seats: (price * qty) must be math before it becomes text after the $.',
+     moves: ['Multiplication is * in Java.', 'Compute inside parentheses, then glue after the $ label.'],
+     note: 'Real programs store values once and compute everything else — type the facts, never the answers.'}
+  ]
+},
+{
+  id: 'java-ch2', n: 2, icon: '🔢', title: 'Numbers, Types & Conversion',
+  sub: 'int vs double, the division trap, casting, and chars — where Java\'s type promises bite.',
+  objectives: 'CSCI-241 PF 3, 5: primitive types; arithmetic; type conversion; integer division; precision.',
+  teach: {
+    body: 'Java keeps two kinds of numbers: int (whole) and double (decimal). Dividing two ints throws the fraction away — 7 / 2 is 3, never 3.5 — and % hands you the remainder instead. A cast like (double) converts a value for one operation. A char is a single character that secretly is a number (its code), so chars can do arithmetic. Math.round, Math.max and friends live in the Math class.',
+    points: ['int / int truncates toward zero; % gives what is left over.', 'One double anywhere in the operation makes the whole thing decimal.', '(type) value converts for that one spot — it does not change the variable.', 'char is a number in costume: \'B\' + 1 is 67 until you cast it back to char.']
+  },
+  questions: [
+    {id: 'j2q1', type: 'build', diff: 'Warm-up', title: 'Fair Shares', tags: ['types-conversion'],
+     prompt: '17 candies are shared equally among 5 kids. Using int variables candies and kids, print:\nEach kid: 3\nLeft over: 2\nBoth numbers computed — one with /, one with %.',
+     starter: prog('int candies = 17;\nint kids = 5;\n// Print the two lines.'),
+     solution: prog('int candies = 17;\nint kids = 5;\nSystem.out.println("Each kid: " + (candies / kids));\nSystem.out.println("Left over: " + (candies % kids));'),
+     checks: [{type: 'output', lines: ['Each kid: 3', 'Left over: 2']}],
+     hint: '/ between two ints answers "how many whole shares"; % answers "what remains after sharing".',
+     moves: ['int division truncates: 17 / 5 is 3, not 3.4.', '% is the remainder operator: 17 % 5 is 2.'],
+     note: '/ asks "how many fit", % asks "what is left" — two halves of the same long division.'},
+    {id: 'j2q2', type: 'trace', diff: 'Warm-up', title: 'The Division Fork', tags: ['types-conversion'],
+     code: prog('System.out.println(7 / 2);\nSystem.out.println(7.0 / 2);\nSystem.out.println(7 / 2.0);'),
+     question: 'What three lines print, in order?',
+     choices: ['3, then 3.5, then 3.5', '3.5, 3.5, 3.5', '3, 3, 3', '3, then 3, then 3.5'],
+     answer: 0,
+     why: '7 / 2 is int ÷ int: the fraction is discarded → 3. The moment either side is a double (7.0 or 2.0), the division is decimal → 3.5. One decimal point anywhere changes the whole operation.',
+     note: 'Division looks at BOTH operands: two ints, whole answer; any double, decimal answer.'},
+    {id: 'j2q3', type: 'build', diff: 'Core', title: 'True Average', tags: ['types-conversion'],
+     prompt: 'Three quiz scores are 82, 91 and 72. Compute their average as a decimal (an int sum divided carelessly will lie to you), and print it with printf, exactly:\nAverage: 81.7',
+     starter: prog('// Add the scores, average them as a double, printf with %.1f'),
+     solution: prog('int sum = 82 + 91 + 72;\ndouble avg = (double) sum / 3;\nSystem.out.printf("Average: %.1f", avg);'),
+     checks: [{type: 'output', lines: ['Average: 81.7']}],
+     hint: 'Cast the sum to double BEFORE dividing. printf\'s %.1f means: a decimal number, one digit after the point.',
+     moves: ['(double) sum converts the sum for this operation.', 'sum / 3 in ints would truncate to 81 before the double ever saw it.', 'printf("... %.1f", value) formats without println.'],
+     note: 'Convert early, divide late: the cast has to happen before the division, not after.'},
+    {id: 'j2q4', type: 'build', diff: 'Core', title: 'Digit Surgery', tags: ['types-conversion', 'fundamentals'],
+     prompt: 'Given int n = 472, print its hundreds digit and its last digit, computed with / and %:\nHundreds: 4\nLast digit: 2',
+     starter: prog('int n = 472;\n// Print the two digits.'),
+     solution: prog('int n = 472;\nSystem.out.println("Hundreds: " + (n / 100));\nSystem.out.println("Last digit: " + (n % 10));'),
+     checks: [{type: 'output', lines: ['Hundreds: 4', 'Last digit: 2']}],
+     hint: 'Dividing by 100 shifts digits right (472 → 4). Mod 10 keeps only the last digit.',
+     moves: ['n / 100 drops the last two digits.', 'n % 10 keeps only the last digit.'],
+     note: '/ by a power of ten chops digits off the right; % with a power of ten keeps them.'},
+    {id: 'j2q5', type: 'build', diff: 'Core', title: 'Next Grade Up', tags: ['types-conversion'],
+     prompt: 'A char variable grade holds \'B\'. Compute the next letter grade up and print:\nNext grade up: C\n(The letter must be computed from grade — a char is secretly a number.)',
+     starter: prog('char grade = \'B\';\n// Compute and print the next grade.'),
+     solution: prog('char grade = \'B\';\nchar next = (char) (grade + 1);\nSystem.out.println("Next grade up: " + next);'),
+     checks: [{type: 'output', lines: ['Next grade up: C']}],
+     hint: 'grade + 1 is a number (67). A cast brings it back to a letter: (char) (grade + 1).',
+     moves: ['Chars do arithmetic as their codes: \'B\' is 66, + 1 is 67.', '(char) converts the number back into the character at that code.'],
+     note: 'A char is a number wearing a letter costume — casts take the costume off and put it back.'},
+    {id: 'j2q6', type: 'trace', diff: 'Core', title: 'Now or Later?', tags: ['fundamentals', 'types-conversion'],
+     code: prog('int x = 5;\nSystem.out.println(x++);\nSystem.out.println(x);\nSystem.out.println(++x);'),
+     question: 'What three lines print, in order?',
+     choices: ['5, then 6, then 7', '6, then 6, then 7', '5, then 6, then 6', '6, then 7, then 8'],
+     answer: 0,
+     why: 'x++ means "use the value, THEN add one": prints 5, x becomes 6. The second line prints the new 6. ++x means "add one, THEN use": x becomes 7 and prints 7.',
+     note: '++ after the name is "later"; ++ before the name is "now".'},
+    {id: 'j2q7', type: 'build', diff: 'Stretch', title: 'High and Low', tags: ['types-conversion'],
+     prompt: 'Two judges score a routine: 64 and 89, in int variables a and b. Using Math.max and Math.min, print:\nHigh: 89\nLow: 64',
+     starter: prog('int a = 64;\nint b = 89;\n// Print High and Low.'),
+     solution: prog('int a = 64;\nint b = 89;\nSystem.out.println("High: " + Math.max(a, b));\nSystem.out.println("Low: " + Math.min(a, b));'),
+     checks: [{type: 'output', lines: ['High: 89', 'Low: 64']}],
+     hint: 'Math.max(a, b) hands back the bigger of the two — it is a value you can glue straight into the print.',
+     moves: ['Math.max / Math.min take two values and return one.', 'Method calls are values: they can sit inside a println.'],
+     note: 'A method call is a vending machine too: arguments in, one value out, usable anywhere a value fits.'},
+    {id: 'j2q8', type: 'build', diff: 'Stretch', title: 'Fahrenheit Fix', tags: ['types-conversion'],
+     prompt: 'Convert 100 degrees Fahrenheit (an int f) to Celsius with c = (f - 32) * 5 / 9 — but done in decimal math, or the fraction vanishes. Print with printf, exactly:\nCelsius: 37.8',
+     starter: prog('int f = 100;\n// Convert in decimal math, printf with %.1f'),
+     solution: prog('int f = 100;\ndouble c = (f - 32) * 5.0 / 9;\nSystem.out.printf("Celsius: %.1f", c);'),
+     checks: [{type: 'output', lines: ['Celsius: 37.8']}],
+     hint: 'The 5.0 is the whole trick: it makes the multiplication decimal, so the division keeps its fraction.',
+     moves: ['(f - 32) * 5 / 9 in pure ints gives 37 — the .777 is truncated away.', 'One decimal literal (5.0) promotes the whole chain to double math.'],
+     note: 'Formulas in code are only as decimal as their least decimal ingredient.'},
+    {id: 'j2q9', type: 'classify', diff: 'Core', title: 'The Silent Wrong Answer', tags: ['debugging', 'types-conversion'],
+     code: prog('double avg = 7 / 2;\nSystem.out.println(avg); // expected 3.5'),
+     question: 'This compiles and runs — but prints 3 instead of 3.5. What kind of error is it?',
+     choices: ['Logic error — the code is legal, it just does the wrong math', 'Syntax error — the compiler should have rejected it', 'Runtime error — it crashes while running'],
+     answer: 0,
+     why: 'Nothing is misspelled and nothing crashes. 7 / 2 is int division (= 3), and only then is the 3 widened into the double. The program faithfully does what it was told — the instruction itself is wrong. That is a logic error, and only testing catches it.',
+     note: 'Logic errors never announce themselves: the program runs perfectly, into the wrong answer.'},
+    {id: 'j2q10', type: 'build', diff: 'Boss', title: 'Change Breakdown', tags: ['types-conversion', 'fundamentals'],
+     prompt: 'A vending machine owes 387 cents. Break it into whole dollars and remaining cents with / and %, and print:\nDollars: 3\nCents left: 87',
+     starter: prog('int cents = 387;\n// Break it down and print.'),
+     solution: prog('int cents = 387;\nint dollars = cents / 100;\nint left = cents % 100;\nSystem.out.println("Dollars: " + dollars);\nSystem.out.println("Cents left: " + left);'),
+     checks: [{type: 'output', lines: ['Dollars: 3', 'Cents left: 87']}],
+     hint: 'One division answers both questions: / 100 counts the dollars, % 100 counts what could not make a dollar.',
+     moves: ['Division by 100 counts whole dollars (truncation is a feature here).', 'Modulo 100 is everything under a dollar.'],
+     note: 'Every unit conversion is this same pair: / sizes the big unit, % keeps the change.'}
+  ]
+}
+];
+
+if (typeof module !== 'undefined' && module.exports) module.exports = {JAVA_CHAPTERS, JAVA_TAG_INFO, prog};
+
+</script>
+<script>
 (function(){
 'use strict';
 /* Code Dojo v2 — DE Interview Prep (Python only). All state on-device. */
@@ -3007,7 +3380,7 @@ var storageOK = true;
 function lsGet(){ try { return localStorage.getItem(KEY); } catch (e){ storageOK = false; return null; } }
 function lsSet(v){ try { localStorage.setItem(KEY, v); } catch (e){ storageOK = false; } }
 function defaultState(){
-  return {v: 2, xp: {drills: 0, sql: 0, fundamentals: 0, rapid: 0}, done: {drills: {}, sql: {}, fundamentals: {}}, rapid: {plays: {}, best: {}}, mistakes: [], streak: {last: '', count: 0}, helped: {}};
+  return {v: 2, xp: {drills: 0, sql: 0, fundamentals: 0, rapid: 0, java: 0}, done: {drills: {}, sql: {}, fundamentals: {}, javaQ: {}}, rapid: {plays: {}, best: {}}, mistakes: [], streak: {last: '', count: 0}, helped: {}, tagStats: {}};
 }
 function migrate(s){
   if (!s) return defaultState();
@@ -3018,6 +3391,7 @@ function migrate(s){
     if (s.rapid){ d.rapid.plays = Object.assign(d.rapid.plays, s.rapid.plays || {}); d.rapid.best = Object.assign(d.rapid.best, s.rapid.best || {}); }
     d.mistakes = s.mistakes || []; d.streak = s.streak || d.streak;
     d.helped = (s.helped && typeof s.helped === 'object') ? s.helped : {};
+    d.tagStats = (s.tagStats && typeof s.tagStats === 'object') ? s.tagStats : {};
     return d;
   }
   if (s.v === 1){ // v1 dual-track save: keep Python fundamentals, drop Java
@@ -3155,7 +3529,7 @@ function openLesson(coll, id, stage){
        stash: {}, showData: false, maxStageIdx: 0,
        shapeDone: !L.build.shapeQ, shapeMsg: '', shapeGood: false,
        needVerdict: false, verdictDone: !L.build.verdictQ, verdictMsg: '', verdictGood: false,
-       xpAtStart: state.xp.drills + state.xp.sql + state.xp.fundamentals + state.xp.rapid,
+       xpAtStart: state.xp.drills + state.xp.sql + state.xp.fundamentals + state.xp.rapid + state.xp.java,
        startedAt: Date.now()};
   S.maxStageIdx = Math.max(furthestIdx(coll, id), STAGES.indexOf(S.stage));
   render(); window.scrollTo(0, 0);
@@ -3205,6 +3579,12 @@ function render(){
   else if (S.screen === 'lesson') app.innerHTML = viewLesson();
   else if (S.screen === 'review') app.innerHTML = viewReview();
   else if (S.screen === 'rapid') app.innerHTML = viewRapid();
+  else if (S.screen === 'jchapter') app.innerHTML = viewJavaChapter();
+  else if (S.screen === 'jquestion') app.innerHTML = viewJavaQuestion();
+  if (S.screen === 'jquestion'){
+    var jta = document.getElementById('editor');
+    if (jta && S.qCode !== null && S.qCode !== undefined) jta.value = S.qCode;
+  }
   if (S.screen === 'lesson'){
     var ta = document.getElementById('editor');
     if (ta && S.buildCode !== null && S.buildCode !== undefined) ta.value = S.buildCode;
@@ -3226,7 +3606,7 @@ function render(){
 }
 function headerHtml(){
   return '<div class="topbar"><div class="logo">🥋 Code<span>Dojo</span></div>' +
-    '<div class="stats"><div class="stat">⭐ ' + (state.xp.drills + state.xp.sql + state.xp.fundamentals + state.xp.rapid) + ' XP</div>' +
+    '<div class="stats"><div class="stat">⭐ ' + (state.xp.drills + state.xp.sql + state.xp.fundamentals + state.xp.rapid + state.xp.java) + ' XP</div>' +
     '<div class="stat">🔥 ' + state.streak.count + '</div></div></div>';
 }
 function sectionHtml(coll){
@@ -3266,6 +3646,7 @@ function viewHome(){
   h += sectionHtml('sql');
   h += rapidSectionHtml();
   h += sectionHtml('fundamentals');
+  h += javaSectionHtml();
   h += '<div class="card"><h3 style="margin-top:0">How a drill works</h3>' +
     '<p>Predict → step through → rebuild → build, at interview pace. Every drill Build makes you pass two habit gates: a <b>shape check</b> before the editor unlocks (name the set, check the shape), and a <b>verdict check</b> after a passing run — you may only claim what your program printed.</p>' +
     '<p>Stuck on a Build? Help escalates in rungs: first <b>located feedback</b> (your output vs the goal, the first divergence, one question), then the <b>moves list</b>, then — after 3 tries — a <b>guided solution study</b>. Anything finished with help comes back as a ❄️ cold recheck the next day; passing it unaided is what banks it.</p>' +
@@ -3276,7 +3657,7 @@ function viewHome(){
     '<button onclick="H.resetAll()">↺ Reset everything</button>' +
     '<input type="file" id="importFile" accept=".json,application/json" class="hidden" onchange="H.importProgress(this)">' +
     '</div>';
-  h += '<p class="note" style="margin-top:14px">Coming next: Modeling & Pipelines and timed Sprint mode. The Java arm is fully designed (90-question levels) and parked in the goal docs for after the interview.</p>';
+  h += '<p class="note" style="margin-top:14px">Coming next: Modeling & Pipelines, timed Sprint mode, and Java Level 1 chapters 3–9 (input & interactive programs, conditionals, loops, methods, arrays).</p>';
   return h;
 }
 function stageChips(coll, L){
@@ -3580,14 +3961,149 @@ function viewBuild(L){
 }
 function viewDone(L){
   var ls = lessonsOf(S.coll); var idx = ls.indexOf(L);
-  var earnedNow = (state.xp.drills + state.xp.sql + state.xp.fundamentals + state.xp.rapid) - (S.xpAtStart || 0);
+  var earnedNow = (state.xp.drills + state.xp.sql + state.xp.fundamentals + state.xp.rapid + state.xp.java) - (S.xpAtStart || 0);
   var h = '<div class="card center"><div class="bigemoji">🎉</div><h2>Lesson complete!</h2>' +
     '<p>' + (earnedNow > 0 ? 'You earned ' + earnedNow + ' XP' : 'Already banked — no new XP for a redo') + ' in <b>' + escHtml(COLLECTIONS[S.coll].title) + '</b> for <b>' + escHtml(L.title) + '</b> — in ' + elapsedStr() + (L.target ? ' (target ' + L.target + ')' : '') + '.</p>' +
     (state.helped[S.coll + ':' + L.id] ? '<p class="note">📖 This Build was finished after a solution study, so it is queued as a ❄️ cold recheck for tomorrow. Passing it cold — no peeking — is what banks it.</p>' : '');
   if (idx + 1 < ls.length) h += '<button class="btn" onclick="H.open(\'' + S.coll + '\',\'' + ls[idx + 1].id + '\')">Next lesson: ' + escHtml(ls[idx + 1].title) + ' →</button>';
   h += '<button class="btn secondary" onclick="H.home()">Back to path</button></div>';
   return h;
+}/* ---------- Java arm (CSCI-241) ---------- */
+function javaChapterById(id){ for (var i = 0; i < JAVA_CHAPTERS.length; i++) if (JAVA_CHAPTERS[i].id === id) return JAVA_CHAPTERS[i]; return null; }
+function javaQuestionById(qid){
+  for (var i = 0; i < JAVA_CHAPTERS.length; i++){
+    var qs = JAVA_CHAPTERS[i].questions;
+    for (var j = 0; j < qs.length; j++) if (qs[j].id === qid) return {ch: JAVA_CHAPTERS[i], q: qs[j], idx: j};
+  }
+  return null;
 }
+function javaPassedInChapter(ch){ return ch.questions.filter(function(q){ return !!state.done.javaQ[q.id]; }).length; }
+function javaChapterUnlocked(idx){ if (idx === 0) return true; return javaPassedInChapter(JAVA_CHAPTERS[idx - 1]) >= 7; }
+function tagStat(tag){ if (!state.tagStats[tag]) state.tagStats[tag] = {pass: 0, fail: 0, streak: 0}; return state.tagStats[tag]; }
+function javaTagPass(q){ q.tags.forEach(function(t){ var st = tagStat(t); st.pass++; st.streak = 0; }); }
+function javaTagFail(q){ q.tags.forEach(function(t){ var st = tagStat(t); st.fail++; st.streak++; }); }
+function strugglingTags(){ return Object.keys(state.tagStats).filter(function(t){ return state.tagStats[t].streak >= 3 && JAVA_TAG_INFO[t]; }); }
+function remedialFor(tag){
+  var out = [];
+  JAVA_CHAPTERS.forEach(function(ch){ ch.questions.forEach(function(q){ if (q.tags.indexOf(tag) >= 0) out.push({ch: ch, q: q}); }); });
+  out.sort(function(a, b){ return (state.done.javaQ[a.q.id] ? 1 : 0) - (state.done.javaQ[b.q.id] ? 1 : 0); });
+  return out.slice(0, 3);
+}
+function javaComplete(q, helped){
+  if (helped){ state.helped['java:' + q.id] = true; queueColdRecheck('java', q.id); }
+  if (!state.done.javaQ[q.id]){ state.done.javaQ[q.id] = true; state.xp.java += XP_PER; }
+  javaTagPass(q); save();
+}
+function javaSectionHtml(){
+  var h = '<div class="unithead">\u2615 Java \u2014 CSCI-241 Track</div><p class="note" style="margin:-4px 2px 10px">Built chapter by chapter from the course learning outcomes: 10 questions per chapter, pass 7 to unlock the next. Stumble repeatedly on one fundamental and the dojo points you back to exactly where it was taught.</p>';
+  strugglingTags().forEach(function(tag){
+    var info = JAVA_TAG_INFO[tag];
+    h += '<div class="card" style="border-color:var(--amber)"><h3 style="margin-top:0">\uD83D\uDCCC Go back to move forward \u2014 ' + escHtml(info.label) + '</h3>' +
+      '<p>' + escHtml(info.objective) + '</p>' +
+      '<p class="note">This fundamental is tripping you up (' + state.tagStats[tag].streak + ' misses in a row). It is first taught in Chapter ' + (info.chapter + 1) + ' \u2014 a few reps there unstick the current work:</p>' +
+      remedialFor(tag).map(function(r){ return '<button class="btn secondary" style="margin:4px 6px 0 0" onclick="H.openQuestion(\'' + r.ch.id + '\',\'' + r.q.id + '\')">Ch ' + r.ch.n + ' \u00B7 ' + escHtml(r.q.title) + '</button>'; }).join('') + '</div>';
+  });
+  h += '<div class="cards">';
+  JAVA_CHAPTERS.forEach(function(ch, i){
+    var un = javaChapterUnlocked(i), passed = javaPassedInChapter(ch);
+    var cold = ch.questions.some(function(q){ return coldPending('java', q.id); });
+    h += '<button class="pathcard' + (passed === 10 ? ' done' : '') + '" ' + (un ? 'onclick="H.openChapter(\'' + ch.id + '\')"' : 'disabled') + '>' +
+      '<div class="icon">' + ch.icon + '</div><div><div class="t">Chapter ' + ch.n + '. ' + escHtml(ch.title) + '</div>' +
+      '<div class="s">' + escHtml(ch.sub) + (cold ? ' \u00B7 \u2744\uFE0F cold recheck due' : '') + '</div></div><div class="dots">' + (un ? passed + ' / 10' + (passed === 10 ? ' \u2705' : '') : '\uD83D\uDD12 Pass 7 in Ch ' + JAVA_CHAPTERS[i - 1].n) + '</div></button>';
+  });
+  h += '</div>';
+  var totalQ = JAVA_CHAPTERS.length * 10;
+  var doneQ = JAVA_CHAPTERS.reduce(function(n, ch){ return n + javaPassedInChapter(ch); }, 0);
+  h += '<div class="progressbar"><div style="width:' + Math.round(doneQ / totalQ * 100) + '%"></div></div>';
+  return h;
+}
+function viewJavaChapter(){
+  var ch = javaChapterById(S.chId); var passed = javaPassedInChapter(ch);
+  var idx = JAVA_CHAPTERS.indexOf(ch);
+  var h = headerHtml() + '<button class="backbtn" onclick="H.home()">\u2190 All tracks</button>';
+  h += '<h2 style="margin:2px 0 4px">' + ch.icon + ' Chapter ' + ch.n + ': ' + escHtml(ch.title) + '</h2>';
+  h += '<div class="note">' + escHtml(ch.objectives) + '</div>';
+  h += '<div class="progressbar"><div style="width:' + (passed / 10 * 100) + '%"></div></div>';
+  h += '<div class="card"><h3 style="margin-top:0">\uD83D\uDCD6 The chapter brief</h3>';
+  ch.teach.body.split('\n\n').forEach(function(par){ h += '<p>' + escHtml(par) + '</p>'; });
+  h += '<h3>Key ideas</h3><ul>' + ch.teach.points.map(function(pt){ return '<li>' + escHtml(pt) + '</li>'; }).join('') + '</ul></div>';
+  var typeIcon = {build: '\u2328\uFE0F', trace: '\uD83D\uDD2E', classify: '\uD83D\uDD0D'};
+  ch.questions.forEach(function(q, i){
+    var done = !!state.done.javaQ[q.id], cold = coldPending('java', q.id);
+    h += '<button class="qrow" onclick="H.openQuestion(\'' + ch.id + '\',\'' + q.id + '\')">' +
+      '<div class="qn">' + (i + 1) + '</div><div class="qt"><div>' + typeIcon[q.type] + ' ' + escHtml(q.title) + '</div>' +
+      '<div class="s">' + escHtml(q.diff) + ' \u00B7 ' + q.tags.map(function(t){ return (JAVA_TAG_INFO[t] || {}).label || t; }).join(' \u00B7 ') + '</div></div>' +
+      '<div class="dots">' + (done ? '\u2705' : (cold ? '\u2744\uFE0F redo cold' : '\u25B6')) + '</div></button>';
+  });
+  if (idx + 1 < JAVA_CHAPTERS.length)
+    h += '<p class="note">' + (passed >= 7 ? '\u2705 Chapter ' + JAVA_CHAPTERS[idx + 1].n + ' is unlocked.' : 'Pass 7 of 10 to unlock Chapter ' + JAVA_CHAPTERS[idx + 1].n + ' \u2014 you have ' + passed + '.') + '</p>';
+  return h;
+}
+function javaQNorm(q){ return {checks: q.checks.map(function(c){ return {type: 'output', expected: c.lines}; })}; }
+function viewJavaQuestion(){
+  var f = javaQuestionById(S.qid); var ch = f.ch, q = f.q;
+  var typeLabel = {build: '\u2328\uFE0F Build', trace: '\uD83D\uDD2E Trace', classify: '\uD83D\uDD0D Classify'}[q.type];
+  var h = '<button class="backbtn" onclick="H.openChapter(\'' + ch.id + '\')">\u2190 Chapter ' + ch.n + ': ' + escHtml(ch.title) + '</button>';
+  h += '<h2 style="margin:2px 0 4px">' + typeLabel + ' \u2014 ' + escHtml(q.title) + '</h2>';
+  h += '<div class="note">Question ' + (f.idx + 1) + ' of 10 \u00B7 ' + escHtml(q.diff) + ' \u00B7 ' + q.tags.map(function(t){ return '<span class="tagchip">' + escHtml((JAVA_TAG_INFO[t] || {}).label || t) + '</span>'; }).join('') +
+    (state.done.javaQ[q.id] ? ' \u00B7 \u2705 banked' : '') + (coldPending('java', q.id) ? ' \u00B7 \u2744\uFE0F cold recheck \u2014 pass unaided to bank it' : '') + '</div>';
+  h += q.type === 'build' ? javaBuildHtml(ch, q) : javaChoiceHtml(ch, q);
+  return h;
+}
+function javaNextBtn(ch, q){
+  var f = javaQuestionById(q.id);
+  var label = f.idx + 1 < ch.questions.length ? 'Next question \u2192' : 'Back to chapter \u2192';
+  return '<button class="btn" style="margin-top:12px" onclick="H.jNext()">' + label + '</button>';
+}
+function javaBuildHtml(ch, q){
+  if (S.qStudy){
+    return '<div class="card" style="border-color:var(--amber)"><h3 style="margin-top:0">\uD83D\uDCD6 Study the solution</h3>' +
+      '<p>Don\u2019t copy it. For each line, say <b>why</b> it is there. When the idea is yours, hide this and rebuild from the starter \u2014 from the idea, not from memory of the text.</p>' +
+      '<div class="code-label">Solution</div>' + codeBlock(q.solution) +
+      '<div class="stripwrap"><div class="locate-t">\uD83E\uDDED The moves this question needs</div><ol class="strip">' + q.moves.map(function(mv){ return '<li>' + escHtml(mv) + '</li>'; }).join('') + '</ol></div>' +
+      '<button class="btn" style="margin-top:12px" onclick="H.jRebuild()">I\u2019ve got the idea \u2014 rebuild it myself</button></div>';
+  }
+  var h = '<div class="card"><p class="prompt"><b>' + escHtml(q.prompt) + '</b></p>';
+  if (q.input) h += '<div class="area-label">\u2328\uFE0F Input your program receives (one line per entry)</div><div class="outbox">' + escHtml(q.input.join('\n')) + '</div>';
+  h += '<textarea class="editor" id="editor" spellcheck="false" autocapitalize="off" autocomplete="off">' + escHtml(S.qCode === null ? q.starter : S.qCode) + '</textarea>';
+  h += '<div class="btnrow"><button class="btn" onclick="H.jRun()">\u25B6 Run &amp; check</button>' +
+    '<button class="btn secondary" onclick="H.jToggleHint()">' + (S.qShowHint ? 'Hide hint' : '\uD83D\uDCA1 Hint') + '</button></div>';
+  if (S.qShowHint) h += '<div class="stepnote" style="margin-top:12px">' + escHtml(q.hint) + '</div>';
+  if (S.qResult){
+    var r = S.qResult;
+    h += '<div class="area-label">Your output</div><div class="outbox">' + (r.output.length ? escHtml(r.output.join('\n')) : ' ') + '</div>';
+    if (r.error) h += '<div class="feedback bad">\u26A0\uFE0F ' + escHtml(r.error) + '</div>';
+    if (r.checks) h += r.checks.map(function(chk){ return '<div class="checkline">' + (chk.pass ? '\u2705' : '\u274C') + ' ' + escHtml(chk.label) + '</div>'; }).join('');
+    if (!r.allPass && r.diverge) h += divergeHtml(r);
+    if (!r.allPass && S.qFails >= 2) h += '<div class="stripwrap"><div class="locate-t">\uD83E\uDDED The moves this question needs</div><ol class="strip">' + q.moves.map(function(mv){ return '<li>' + escHtml(mv) + '</li>'; }).join('') + '</ol><p class="note" style="margin:6px 0 0">Walk your code top to bottom against this list: which move is missing \u2014 or happening in the wrong order?</p></div>';
+    if (!r.allPass && S.qFails >= 3 && !S.qSolutionSeen) h += '<button class="btn secondary" style="margin-top:10px" onclick="H.jStudy()">\uD83D\uDCD6 Study the solution</button>';
+    if (r.allPass){
+      h += '<div class="feedback good">' + (S.qSolutionSeen ? '\u2705 Passed \u2014 written by you after studying the solution. This question comes back cold tomorrow: that unaided rep is the one that banks it.' : '\u2705 All checks passed. That one is yours \u2014 you wrote it.') + (S.qColdCleared ? '<br>\u2744\uFE0F Cold recheck cleared \u2014 you just did that one unaided.' : '') +
+        '<br>\uD83D\uDCCC The fundamental: ' + escHtml(q.note) + '</div>' + javaNextBtn(ch, q);
+    }
+  }
+  return h + '</div>';
+}
+function javaChoiceHtml(ch, q){
+  var h = '<div class="card"><p>Read the code and commit to an answer <i>before</i> checking. Guessing first is what makes it stick.</p>' +
+    codeBlock(q.code) + '<p><b>' + escHtml(q.question) + '</b></p>';
+  var perm = permFor('java:' + q.id, q.choices.length);
+  h += perm.map(function(origIdx, dispIdx){
+    var cls = '';
+    if (S.qChecked && origIdx === q.answer) cls = 'correct';
+    else if (S.qChecked && dispIdx === S.qSel) cls = 'wrong';
+    else if (dispIdx === S.qSel) cls = 'selected';
+    return '<button class="choice ' + cls + '" onclick="H.jPick(' + dispIdx + ')">' + escHtml(q.choices[origIdx]) + '</button>';
+  }).join('');
+  if (!S.qChecked) h += '<button class="btn" ' + (S.qSel < 0 ? 'disabled' : '') + ' onclick="H.jCheckChoice()">Check answer</button>';
+  else {
+    h += feedbackHtml(S.qWas, q.why);
+    if (S.qWas) h += '<div class="stepnote">\uD83D\uDCCC The fundamental: ' + escHtml(q.note) + '</div>' + javaNextBtn(ch, q);
+    else h += '<button class="btn secondary" onclick="H.jRetry()">Try again</button>';
+  }
+  return h + '</div>';
+}
+
 function viewReview(){
   var h = headerHtml() + '<button class="backbtn" onclick="H.home()">← Back</button><div class="card"><h2>Review queue</h2>' +
     '<p>Every wrong answer landed here. The fix is not re-reading — it is redoing that exercise until it is easy.</p>';
@@ -3597,6 +4113,7 @@ function viewReview(){
     var key = m.coll + m.concept + m.kind + (m.cold ? ':cold' : ''); if (seen[key]) return; seen[key] = 1;
     var title = null, kindLabel = m.kind;
     if (m.coll === 'rapid'){ var D = rapidDeck(m.concept); if (!D) return; title = D.title + ' (Rapid Fire)'; kindLabel = 'missed card'; }
+    else if (m.coll === 'java'){ var jf = javaQuestionById(m.concept); if (!jf) return; title = 'Ch ' + jf.ch.n + ' \u00B7 ' + jf.q.title + ' (Java)'; kindLabel = m.kind; }
     else { var L = lessonById(m.coll, m.concept); if (!L) return; title = L.title; }
     if (m.cold){
       var dueTxt = m.due ? new Date(m.due).toLocaleDateString() : '';
@@ -3648,6 +4165,7 @@ window.H = {
   open: function(coll, id){ openLesson(coll, id, null); },
   openFromReview: function(coll, id, kind){
     if (coll === 'rapid'){ H.rapidStart(id); return; }
+    if (coll === 'java'){ var jf2 = javaQuestionById(id); if (jf2) H.openQuestion(jf2.ch.id, id); return; }
     openLesson(coll, id, kind === 'build' || kind === 'shape' || kind === 'verdict' ? 'build' : kind);
   },
   rapidStart: function(deckId){
@@ -3691,6 +4209,77 @@ window.H = {
       var D = rapidDeck(S.deckId); S.cardPerm = shuffledIdx(D.cards[S.order[S.pos]].choices.length);
     }
     render(); window.scrollTo(0, 0);
+  },
+  openChapter: function(id){
+    stopTimer(); S = {screen: 'jchapter', chId: id}; render(); window.scrollTo(0, 0);
+  },
+  openQuestion: function(chId, qid){
+    stopTimer();
+    var f = javaQuestionById(qid); if (!f) return;
+    S = {screen: 'jquestion', chId: f.ch.id, qid: qid, qCode: null, qResult: null, qFails: 0,
+         qShowHint: false, qSolutionSeen: false, qStudy: false, qSel: -1, qChecked: false,
+         qWas: false, qColdCleared: false, orders: {}};
+    render(); window.scrollTo(0, 0);
+  },
+  jNext: function(){
+    var f = javaQuestionById(S.qid); if (!f) return;
+    if (f.idx + 1 < f.ch.questions.length) H.openQuestion(f.ch.id, f.ch.questions[f.idx + 1].id);
+    else H.openChapter(f.ch.id);
+  },
+  jToggleHint: function(){
+    var ta = document.getElementById('editor'); if (ta) S.qCode = ta.value;
+    S.qShowHint = !S.qShowHint; render();
+  },
+  jStudy: function(){
+    var ta = document.getElementById('editor'); if (ta) S.qCode = ta.value;
+    S.qSolutionSeen = true; S.qStudy = true; render(); window.scrollTo(0, 0);
+  },
+  jRebuild: function(){
+    var f = javaQuestionById(S.qid); if (!f) return;
+    S.qStudy = false; S.qCode = f.q.starter; S.qResult = null;
+    render(); window.scrollTo(0, 0);
+  },
+  jRun: function(){
+    var ta = document.getElementById('editor'); if (!ta) return;
+    S.qCode = ta.value;
+    var f = javaQuestionById(S.qid); if (!f) return;
+    var q = f.q;
+    var r = runProgram('java', S.qCode, q.input);
+    var checks = [], allPass = r.ok;
+    q.checks.forEach(function(chk){
+      var pass = r.ok && JSON.stringify(r.output) === JSON.stringify(chk.lines);
+      checks.push({pass: pass, label: 'Output is exactly: ' + chk.lines.join(' \u00B7 ')});
+      if (!pass) allPass = false;
+    });
+    if (!r.ok) checks = [{pass: false, label: 'Program runs without errors'}];
+    S.qResult = {output: r.output, error: r.ok ? null : r.error, checks: checks, allPass: allPass,
+      diverge: allPass ? null : divergenceFor(r, javaQNorm(q))};
+    if (allPass){
+      if (!S.qSolutionSeen && coldPending('java', q.id)){
+        state.mistakes = state.mistakes.filter(function(m){ return !(m.cold && m.coll === 'java' && m.concept === q.id); });
+        S.qColdCleared = true;
+      }
+      javaComplete(q, S.qSolutionSeen);
+    } else {
+      S.qFails++; javaTagFail(q); recordMistake('java', q.id, q.type);
+    }
+    render();
+  },
+  jPick: function(i){ if (!S.qChecked){ S.qSel = i; render(); } },
+  jRetry: function(){ S.qChecked = false; S.qSel = -1; render(); },
+  jCheckChoice: function(){
+    var f = javaQuestionById(S.qid); if (!f) return;
+    var q = f.q;
+    var perm = permFor('java:' + q.id, q.choices.length);
+    S.qChecked = true; S.qWas = S.qSel >= 0 && perm[S.qSel] === q.answer;
+    if (S.qWas){
+      if (coldPending('java', q.id)){
+        state.mistakes = state.mistakes.filter(function(m){ return !(m.cold && m.coll === 'java' && m.concept === q.id); });
+        S.qColdCleared = true;
+      }
+      javaComplete(q, false);
+    } else { javaTagFail(q); recordMistake('java', q.id, q.type); }
+    render();
   },
   toStage: function(stage){
     stashStage();
