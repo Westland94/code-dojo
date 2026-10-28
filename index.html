@@ -2469,6 +2469,7 @@ function callMethod(o, name, args, ctx, kwargs){
     if (name === 'substring') return o.slice(args[0], args.length > 1 ? args[1] : undefined);
     if (name === 'contains') return o.includes(String(args[0]));
     if (name === 'equals') return o === String(args[0]);
+    if (name === 'equalsIgnoreCase') return o.toLowerCase() === String(args[0]).toLowerCase();
     if (name === 'indexOf') return o.indexOf(String(args[0]));
     if (name === 'lastIndexOf') return o.lastIndexOf(String(args[0]));
     if (name === 'startsWith') return o.startsWith(String(args[0]));
@@ -3238,7 +3239,7 @@ var JAVA_CHAPTERS = [
      hint: 'a = b overwrites the 5 forever — unless you parked it somewhere first.',
      moves: ['Park the first value in a temp variable.', 'Then overwrite a, then restore b from temp.'],
      note: 'Swapping two full glasses needs a third glass. Always.'},
-    {id: 'j1q8', type: 'classify', diff: 'Core', title: 'Name That Error', tags: ['debugging'],
+    {id: 'j1q8', type: 'classify', diff: 'Core', title: 'Name That Error', tags: ['debugging'], premise: 'error',
      code: prog('int count = 0;\nSystem.out.println("Count: " + count)'),
      question: 'This program never prints anything. What kind of error is stopping it?',
      choices: ['Syntax (compile) error — the compiler rejects it before anything runs', 'Runtime error — it starts running, then crashes', 'Logic error — it runs fine but prints the wrong thing'],
@@ -3334,7 +3335,7 @@ var JAVA_CHAPTERS = [
      hint: 'The 5.0 is the whole trick: it makes the multiplication decimal, so the division keeps its fraction.',
      moves: ['(f - 32) * 5 / 9 in pure ints gives 37 — the .777 is truncated away.', 'One decimal literal (5.0) promotes the whole chain to double math.'],
      note: 'Formulas in code are only as decimal as their least decimal ingredient.'},
-    {id: 'j2q9', type: 'classify', diff: 'Core', title: 'The Silent Wrong Answer', tags: ['debugging', 'types-conversion'],
+    {id: 'j2q9', type: 'classify', diff: 'Core', title: 'The Silent Wrong Answer', tags: ['debugging', 'types-conversion'], premise: 'runs', premiseOutput: ['3'],
      code: prog('double avg = 7 / 2;\nSystem.out.println(avg); // expected 3.5'),
      question: 'This compiles and runs — but prints 3 instead of 3.5. What kind of error is it?',
      choices: ['Logic error — the code is legal, it just does the wrong math', 'Syntax error — the compiler should have rejected it', 'Runtime error — it crashes while running'],
@@ -3354,6 +3355,666 @@ var JAVA_CHAPTERS = [
 ];
 
 if (typeof module !== 'undefined' && module.exports) module.exports = {JAVA_CHAPTERS, JAVA_TAG_INFO, prog};
+
+</script>
+<script>
+'use strict';
+/* Code Dojo — Java arm (CSCI-241), Level 1 Chapters 3–9.
+   Companion to java_lessons.js (Chapters 1–2). Same question shapes and
+   house rules: every build solution is executed against its own checks by
+   tests/test_java_lessons.js; classify questions carry a machine-checkable
+   premise ('error' = the snippet really fails to run; 'runs' = it runs,
+   with premiseOutput pinning what it prints; 'no-finish' = it never
+   terminates, surfaced by the engine's step limit). */
+
+function JV2(body){ return 'public class Main {\n    public static void main(String[] args) {\n' + body + '\n    }\n}'; }
+function indent2(java){ return java.split('\n').map(function(l){ return l ? '        ' + l : l; }).join('\n'); }
+function progJ(body){ return JV2(indent2(body)); }
+function scanProg(body){ return 'import java.util.Scanner;\n' + progJ('Scanner sc = new Scanner(System.in);\n' + body); }
+function scanStarter(body){ return 'import java.util.Scanner;\n' + progJ('Scanner sc = new Scanner(System.in);\n' + body); }
+function clsJ(methods, mainBody){
+  return 'public class Main {\n' + methods + '\n    public static void main(String[] args) {\n' + indent2(mainBody) + '\n    }\n}';
+}
+
+var JAVA_TAG_INFO_MORE = {
+  'strings': {label: 'Strings & text', objective: 'CSCI-241: use String objects and common string operations; compare strings with equals, not ==.', chapter: 2},
+  'input-output': {label: 'Input & interactive programs', objective: 'CSCI-241: write interactive programs using standard input; produce formatted output.', chapter: 3},
+  'conditionals': {label: 'Conditionals & logic', objective: 'CSCI-241: write selection structures (if/else, switch); use relational and logical operators without logic errors.', chapter: 4},
+  'loops': {label: 'Loops', objective: 'CSCI-241: write repetition structures using while, do-while and for loops; avoid boundary and off-by-one errors.', chapter: 5},
+  'methods': {label: 'Methods & modular design', objective: 'CSCI-241: decompose problems into methods; pass parameters; distinguish void from value-returning methods.', chapter: 6},
+  'arrays': {label: 'Arrays & collections', objective: 'CSCI-241: declare, initialize and process arrays — searching, counting, summing, extremes, averages.', chapter: 7}
+};
+
+var JAVA_CHAPTERS_MORE = [
+{
+  id: 'java-ch3', n: 3, icon: '🔤', title: 'Strings & Text',
+  sub: 'Strings are objects: immutable, indexed from zero, and compared with equals — never ==.',
+  objectives: 'CSCI-241 PF 4: use String objects and their common operations; understand immutability.',
+  teach: {
+    body: 'A String is an object, not a primitive: it carries methods (length, charAt, substring, indexOf). Strings are IMMUTABLE — every method that looks like it changes a string actually builds a new one, and if you do not store the result, it evaporates. Characters sit at indexes counting from 0, and substring takes (start, end) where end is one PAST the last character you get.',
+    points: ['Store the result: s = s.toUpperCase(); — the bare call changes nothing.', 'Compare text with a.equals(b) (or equalsIgnoreCase), never ==.', 'substring(a, b) gives characters a … b-1 — the end index is excluded.', 'indexOf returns the first position, or -1 when the text is not there.']
+  },
+  questions: [
+    {id: 'j3q1', type: 'build', diff: 'Warm-up', title: 'Shout It', tags: ['strings'],
+     prompt: 'A String word holds "quiet". Print it shouted, then its length:\nQUIET\nLetters: 5',
+     starter: progJ('String word = "quiet";\n// Print the two lines.'),
+     solution: progJ('String word = "quiet";\nSystem.out.println(word.toUpperCase());\nSystem.out.println("Letters: " + word.length());'),
+     checks: [{type: 'output', lines: ['QUIET', 'Letters: 5']}],
+     hint: 'toUpperCase builds the loud version; length() counts the characters.',
+     moves: ['Method calls on a string return new values.', 'word.length() — strings use a method, not a field.'],
+     note: 'Strings answer questions about themselves through methods: ask, do not reach in.'},
+    {id: 'j3q2', type: 'build', diff: 'Warm-up', title: 'Initials', tags: ['strings'],
+     prompt: 'first holds "Ada" and last holds "Lovelace". Print her initials with periods:\nA.L.\n(built with charAt — not typed out by hand.)',
+     starter: progJ('String first = "Ada";\nString last = "Lovelace";\n// Print the initials.'),
+     solution: progJ('String first = "Ada";\nString last = "Lovelace";\nSystem.out.println(first.charAt(0) + "." + last.charAt(0) + ".");'),
+     checks: [{type: 'output', lines: ['A.L.']}],
+     hint: 'charAt(0) is the first character of a string. Glue: initial, dot, initial, dot.',
+     moves: ['Indexes count from 0: charAt(0) is first.', 'A char glues into a string with + like anything else.'],
+     note: 'charAt is pointing at one seat in a row — and the row starts at seat 0.'},
+    {id: 'j3q3', type: 'trace', diff: 'Core', title: 'Substring Slice', tags: ['strings'],
+     code: progJ('String s = "pineapple";\nSystem.out.println(s.substring(4));\nSystem.out.println(s.substring(0, 4));'),
+     question: 'What two lines print?',
+     choices: ['apple, then pine', 'apple, then pinea', 'pine, then apple', 'appl, then pine'],
+     answer: 0,
+     why: 'substring(4) takes everything from index 4 to the end: "apple". substring(0, 4) takes indexes 0,1,2,3 — the end index 4 is NOT included: "pine".',
+     note: 'substring\'s end index is the fence, not the last post: it is always left out.'},
+    {id: 'j3q4', type: 'build', diff: 'Core', title: 'Find the @', tags: ['strings'],
+     prompt: 'An email is stored in a String: "cassie@school.edu". Find the @ with indexOf, then print:\nPosition: 6\nDomain: school.edu\nThe domain must be cut out with substring, using the position you found.',
+     starter: progJ('String email = "cassie@school.edu";\n// Find the @, then print both lines.'),
+     solution: progJ('String email = "cassie@school.edu";\nint at = email.indexOf("@");\nSystem.out.println("Position: " + at);\nSystem.out.println("Domain: " + email.substring(at + 1));'),
+     checks: [{type: 'output', lines: ['Position: 6', 'Domain: school.edu']}],
+     hint: 'indexOf("@") gives the position; substring(position + 1) is everything after it.',
+     moves: ['Save indexOf\'s answer in a variable — you need it twice.', 'substring(at + 1) starts one past the @.'],
+     note: 'Find first, cut second: indexOf is the measuring tape, substring is the scissors.'},
+    {id: 'j3q5', type: 'build', diff: 'Core', title: 'Same or Not?', tags: ['strings'],
+     prompt: 'String a holds "Java" and String b holds "java". Print whether they match two ways:\nEqual? false\nIgnoring case? true\nBoth answers must come from method calls.',
+     starter: progJ('String a = "Java";\nString b = "java";\n// Print the two verdicts.'),
+     solution: progJ('String a = "Java";\nString b = "java";\nSystem.out.println("Equal? " + a.equals(b));\nSystem.out.println("Ignoring case? " + a.equalsIgnoreCase(b));'),
+     checks: [{type: 'output', lines: ['Equal? false', 'Ignoring case? true']}],
+     hint: 'equals cares about capitals; equalsIgnoreCase does not.',
+     moves: ['a.equals(b) asks the string itself whether the contents match.', 'Case is part of the contents — "Java" and "java" are different text.'],
+     note: '== asks "same box?"; equals asks "same contents?" — for text, you almost always mean contents.'},
+    {id: 'j3q6', type: 'classify', diff: 'Core', title: 'The Forgotten Result', tags: ['debugging', 'strings'], premise: 'runs', premiseOutput: ['hello'],
+     code: progJ('String s = "hello";\ns.toUpperCase();\nSystem.out.println(s);'),
+     question: 'The programmer expected HELLO but the program prints hello. It compiles and runs. What kind of error is this?',
+     choices: ['Logic error — strings are immutable; the uppercase copy was created and thrown away', 'Syntax error — toUpperCase is not a real method', 'Runtime error — the program crashed before printing'],
+     answer: 0,
+     why: 'toUpperCase() builds a NEW string and returns it. Nobody stored it, so s still holds "hello". Legal code, wrong behavior: a logic error, rooted in immutability.',
+     note: 'A method that returns a value is a question — if you do not write down the answer, it is gone.'},
+    {id: 'j3q7', type: 'build', diff: 'Stretch', title: 'Word Count', tags: ['strings'],
+     prompt: 'A sentence is stored: "the cat sat". Split it on spaces and print:\nWords: 3',
+     starter: progJ('String sentence = "the cat sat";\n// Split it and print the count.'),
+     solution: progJ('String sentence = "the cat sat";\nString[] words = sentence.split(" ");\nSystem.out.println("Words: " + words.length);'),
+     checks: [{type: 'output', lines: ['Words: 3']}],
+     hint: 'split(" ") hands back an array of pieces; an array\'s length is a field, no parentheses.',
+     moves: ['split returns an array of strings.', 'Arrays use .length (a field); strings use .length() (a method).'],
+     note: 'String.length() wears parentheses; array.length does not — the classic mix-up.'},
+    {id: 'j3q8', type: 'build', diff: 'Stretch', title: 'Mascot Swap', tags: ['strings'],
+     prompt: 'A cheer is stored: "Go Tigers!". Print the cheer with the mascot replaced by Bears — then print the original cheer, unchanged:\nGo Bears!\nGo Tigers!',
+     starter: progJ('String cheer = "Go Tigers!";\n// Print the new cheer, then the original.'),
+     solution: progJ('String cheer = "Go Tigers!";\nSystem.out.println(cheer.replace("Tigers", "Bears"));\nSystem.out.println(cheer);'),
+     checks: [{type: 'output', lines: ['Go Bears!', 'Go Tigers!']}],
+     hint: 'replace builds the new cheer for the print; the stored cheer keeps its Tigers — that contrast is the whole point.',
+     moves: ['replace(old, new) returns a fresh string.', 'The original variable is untouched unless you assign the result back.'],
+     note: 'Immutability means every edit is a photocopy: the original never changes in your hands.'},
+    {id: 'j3q9', type: 'trace', diff: 'Stretch', title: 'Banana Index', tags: ['strings'],
+     code: progJ('String s = "banana";\nSystem.out.println(s.indexOf("na"));\nSystem.out.println(s.substring(2, 5));'),
+     question: 'What two lines print?',
+     choices: ['2, then nan', '3, then nan', '2, then nana', '1, then ana'],
+     answer: 0,
+     why: 'In "banana" (b=0, a=1, n=2), the first "na" starts at index 2. substring(2, 5) takes indexes 2, 3, 4: n, a, n — "nan".',
+     note: 'indexOf finds where a pattern STARTS; count the characters before it, from zero.'},
+    {id: 'j3q10', type: 'build', diff: 'Boss', title: 'Username Maker', tags: ['strings'],
+     prompt: 'first holds "Cassie" and last holds "Wasniewski". Build the school username — first initial plus last name, all lowercase — and print:\nUsername: cwasniewski\nThe username must be assembled from the two variables.',
+     starter: progJ('String first = "Cassie";\nString last = "Wasniewski";\n// Build and print the username.'),
+     solution: progJ('String first = "Cassie";\nString last = "Wasniewski";\nString user = (first.substring(0, 1) + last).toLowerCase();\nSystem.out.println("Username: " + user);'),
+     checks: [{type: 'output', lines: ['Username: cwasniewski']}],
+     hint: 'substring(0, 1) is the first letter. Glue it to the last name first, then lowercase the whole thing in one call.',
+     moves: ['Cut, glue, then transform — order of operations across methods.', 'Method calls chain: the result of one is the object of the next.'],
+     note: 'Real string work is an assembly line: cut a piece, glue it on, finish the whole product.'}
+  ]
+},
+{
+  id: 'java-ch4', n: 4, icon: '⌨️', title: 'Input & Interactive Programs',
+  sub: 'Programs that converse: read values with a Scanner, answer with formatted output.',
+  objectives: 'CSCI-241 PF 2, 6: interactive input/output; the Scanner pattern; formatted output.',
+  teach: {
+    body: 'Interactive programs read instead of assuming. The pattern: build one Scanner on System.in, then pull values with nextInt / nextDouble / next (one word) / nextLine (the whole line). Two traps run this chapter: nextLine after nextInt returns the REST of the current line (often just a space or nothing), and the type of read must match what the user actually types — ask for an int and get "abc", and the program dies at runtime.',
+    points: ['One Scanner per program, built once: Scanner sc = new Scanner(System.in);', 'next() reads one word; nextLine() reads the rest of the line — they are not interchangeable.', 'The read type is a promise: nextInt on non-numeric input is a runtime crash.', 'printf("... %.2f ...", value) formats decimals — money wants exactly two digits.']
+  },
+  questions: [
+    {id: 'j4q1', type: 'build', diff: 'Warm-up', title: 'Echo the Number', tags: ['input-output'], input: ['7'],
+     prompt: 'The user types a whole number (the input is shown above the editor). Read it with the Scanner and print:\nYou entered: 7',
+     starter: scanStarter('// Read an int and echo it.'),
+     solution: scanProg('int n = sc.nextInt();\nSystem.out.println("You entered: " + n);'),
+     checks: [{type: 'output', lines: ['You entered: 7']}],
+     hint: 'sc.nextInt() waits for the user\'s number and hands it to you as an int. Store it, then print it.',
+     moves: ['A read is a value: int n = sc.nextInt();', 'The prompt text and the value are different things — print both.'],
+     note: 'nextInt is a question the program asks the keyboard — the answer lands in a variable.'},
+    {id: 'j4q2', type: 'build', diff: 'Warm-up', title: 'Double It', tags: ['input-output'], input: ['13'],
+     prompt: 'Read a whole number from the user and print it doubled:\nDoubled: 26',
+     starter: scanStarter('// Read an int, double it, print.'),
+     solution: scanProg('int n = sc.nextInt();\nSystem.out.println("Doubled: " + (n * 2));'),
+     checks: [{type: 'output', lines: ['Doubled: 26']}],
+     hint: 'Parentheses again: (n * 2) must be math before it becomes text.',
+     moves: ['Input first, computation second, output last — the interactive program shape.', 'Compute inside parentheses when gluing into text.'],
+     note: 'Read → compute → print: nearly every console program you write this course is those three beats.'},
+    {id: 'j4q3', type: 'build', diff: 'Warm-up', title: 'Name Tag', tags: ['input-output'], input: ['Maya'],
+     prompt: 'The user types their first name (one word). Read it and print a greeting:\nHello, Maya!',
+     starter: scanStarter('// Read one word and greet.'),
+     solution: scanProg('String name = sc.next();\nSystem.out.println("Hello, " + name + "!");'),
+     checks: [{type: 'output', lines: ['Hello, Maya!']}],
+     hint: 'next() reads a single word as a String — exactly right for a first name.',
+     moves: ['next() returns a String token.', 'Pick the read to match the value: word → next(), number → nextInt().'],
+     note: 'The Scanner is a vending machine with labeled buttons — press the one matching what you asked for.'},
+    {id: 'j4q4', type: 'build', diff: 'Core', title: 'Two Numbers In', tags: ['input-output'], input: ['8 5'],
+     prompt: 'The user types two whole numbers on one line (shown above the editor). Read both and print:\nSum: 13\nProduct: 40',
+     starter: scanStarter('// Read two ints, print sum and product.'),
+     solution: scanProg('int a = sc.nextInt();\nint b = sc.nextInt();\nSystem.out.println("Sum: " + (a + b));\nSystem.out.println("Product: " + (a * b));'),
+     checks: [{type: 'output', lines: ['Sum: 13', 'Product: 40']}],
+     hint: 'Two reads, in order: the first nextInt takes the 8, the second takes the 5. Whitespace between them does not matter.',
+     moves: ['Reads consume input in order, like a queue.', 'Spaces and newlines are just separators between tokens.'],
+     note: 'Input is a line at a deli counter: each read takes the next token in line.'},
+    {id: 'j4q5', type: 'trace', diff: 'Core', title: 'The Newline Trap', tags: ['input-output', 'debugging'], input: ['5 apples'],
+     code: scanProg('int n = sc.nextInt();\nString rest = sc.nextLine();\nSystem.out.println("[" + rest + "]");'),
+     question: 'The user typed "5 apples" on one line. What does the program print?',
+     choices: ['[ apples] — with a leading space', '[apples]', '[] — nothing between the brackets', '[5 apples]'],
+     answer: 0,
+     why: 'nextInt consumed only the digits "5" and stopped mid-line. nextLine then returns the REST of that same line — " apples", leading space included. It does not wait for a fresh line. This is the most common beginner Scanner bug in existence.',
+     note: 'nextInt sips the number and leaves the rest of the line behind; nextLine drinks whatever is left.'},
+    {id: 'j4q6', type: 'build', diff: 'Core', title: 'Tip Calculator', tags: ['input-output', 'types-conversion'], input: ['50'],
+     prompt: 'The user types a restaurant bill: 50 (dollars). Read it as a double, compute a 20% tip, and print with printf:\nTip: $10.00\nTotal: $60.00',
+     starter: scanStarter('// Read the bill as a double; printf both lines with %.2f'),
+     solution: scanProg('double bill = sc.nextDouble();\ndouble tip = bill * 0.20;\nSystem.out.printf("Tip: $%.2f%n", tip);\nSystem.out.printf("Total: $%.2f", bill + tip);'),
+     checks: [{type: 'output', lines: ['Tip: $10.00', 'Total: $60.00']}],
+     hint: 'Money is a double, and %.2f is how money prints — two digits after the point, always. %n ends the first line.',
+     moves: ['nextDouble for decimal input.', 'printf formats: %.2f rounds for display without changing the stored value.'],
+     note: 'Formatting is the display\'s job; the stored number keeps full precision.'},
+    {id: 'j4q7', type: 'build', diff: 'Core', title: 'Age Next Year', tags: ['input-output'], input: ['19'],
+     prompt: 'The user types their age: 19. Read it and print:\nAge now: 19\nNext birthday: 20',
+     starter: scanStarter('// Read the age, print both lines.'),
+     solution: scanProg('int age = sc.nextInt();\nSystem.out.println("Age now: " + age);\nSystem.out.println("Next birthday: " + (age + 1));'),
+     checks: [{type: 'output', lines: ['Age now: 19', 'Next birthday: 20']}],
+     hint: 'One read, two prints — the second print computes age + 1 in parentheses.',
+     moves: ['A single input can feed many outputs.', 'Derived values are computed at print time, not stored by habit.'],
+     note: 'Store what the user gave you; compute everything else on demand.'},
+    {id: 'j4q8', type: 'classify', diff: 'Core', title: 'Wrong Tool for the Input', tags: ['debugging', 'input-output'], premise: 'error', input: ['abc'],
+     code: scanProg('int n = sc.nextInt();\nSystem.out.println("You entered: " + n);'),
+     question: 'This program asks for a number, but the user types abc — and the program dies instantly with an InputMismatchException. What kind of error is that?',
+     choices: ['Runtime error — the code was fine; it crashed on the input it was handed', 'Syntax error — nextInt is spelled wrong', 'Logic error — it ran and printed the wrong number'],
+     answer: 0,
+     why: 'The compiler accepted the program; nothing was misspelled. It ran, met input it could not convert, and crashed mid-execution. Errors that only appear when the program meets the world are runtime errors.',
+     note: 'Syntax is caught at the desk; runtime errors wait for you out in the weather.'},
+    {id: 'j4q9', type: 'build', diff: 'Stretch', title: 'Full Name Greeter', tags: ['input-output'], input: ['Ana Maria'],
+     prompt: 'The user types a full name: Ana Maria (two words, one line). Read the WHOLE line and print:\nWelcome, Ana Maria!',
+     starter: scanStarter('// Read the whole line this time.'),
+     solution: scanProg('String name = sc.nextLine();\nSystem.out.println("Welcome, " + name + "!");'),
+     checks: [{type: 'output', lines: ['Welcome, Ana Maria!']}],
+     hint: 'next() would stop at the space and give you only "Ana". nextLine takes everything on the line.',
+     moves: ['nextLine returns the entire line, spaces included.', 'Match the read to the shape of the answer you expect.'],
+     note: 'next() takes a word; nextLine() takes the sentence — choose by what the user will actually type.'},
+    {id: 'j4q10', type: 'build', diff: 'Boss', title: 'Gas Money Split', tags: ['input-output', 'types-conversion'], input: ['60 4'],
+     prompt: 'The user types a trip cost and a rider count on one line: 60 4. Read the cost as a double and the count as an int, then print:\nRiders: 4\nEach pays: $15.00',
+     starter: scanStarter('// Read double then int; printf the share with %.2f'),
+     solution: scanProg('double cost = sc.nextDouble();\nint riders = sc.nextInt();\ndouble each = cost / riders;\nSystem.out.println("Riders: " + riders);\nSystem.out.printf("Each pays: $%.2f", each);'),
+     checks: [{type: 'output', lines: ['Riders: 4', 'Each pays: $15.00']}],
+     hint: 'Reads are positional: first the 60 (as a double), then the 4 (as an int). double / int is decimal division — no truncation trap here.',
+     moves: ['Mixed reads on one line: match each read\'s type to its token.', 'A double anywhere in the division keeps the fraction.'],
+     note: 'An interactive program is a form: every field has a type, and the reads must match the form.'}
+  ]
+},
+{
+  id: 'java-ch5', n: 5, icon: '🔀', title: 'Conditionals & Logic',
+  sub: 'Branching: if/else chains, switch, the ternary — and the boundary cases that break them.',
+  objectives: 'CSCI-241 CS 1–2, 4: selection structures; relational and logical operators; boundary errors.',
+  teach: {
+    body: 'A program that cannot branch cannot decide. if runs its block when the condition is true; else if offers the next test in line; else catches everything left. Conditions combine with && (both), || (either) and ! (not) — and && / || short-circuit: once the answer is decided, the rest is never evaluated. switch is the cleaner tool when one value picks among fixed cases — but a missing break lets execution fall through into the next case.',
+    points: ['Test boundaries on purpose: the value exactly AT the cutoff is where conditionals lie.', 'else belongs to the nearest if — braces decide what you meant.', '&& stops at the first false; || stops at the first true.', 'switch cases fall through without break — sometimes a feature, usually a bug.']
+  },
+  questions: [
+    {id: 'j5q1', type: 'build', diff: 'Warm-up', title: 'Pass or Retry', tags: ['conditionals'],
+     prompt: 'An int score holds 72. Print "Pass" when the score is 60 or more, otherwise print "Retry". For this score:\nPass',
+     starter: progJ('int score = 72;\n// Branch and print the verdict.'),
+     solution: progJ('int score = 72;\nif (score >= 60) {\n    System.out.println("Pass");\n} else {\n    System.out.println("Retry");\n}'),
+     checks: [{type: 'output', lines: ['Pass']}],
+     hint: 'The cutoff itself passes: the condition is score >= 60, not score > 60. That one-character difference is the classic boundary bug.',
+     moves: ['if / else: exactly one branch runs.', '>= includes the boundary; > excludes it.'],
+     note: 'Every cutoff has a fence-sitter value — decide on purpose which side it lands on.'},
+    {id: 'j5q2', type: 'build', diff: 'Warm-up', title: 'Even or Odd', tags: ['conditionals', 'types-conversion'],
+     prompt: 'An int n holds 17. Print "Even" if it divides by 2 with no remainder, otherwise "Odd":\nOdd',
+     starter: progJ('int n = 17;\n// Test the remainder and print.'),
+     solution: progJ('int n = 17;\nif (n % 2 == 0) {\n    System.out.println("Even");\n} else {\n    System.out.println("Odd");\n}'),
+     checks: [{type: 'output', lines: ['Odd']}],
+     hint: 'n % 2 is the remainder after dividing by 2 — zero means even. Chapter 2\'s % is the tool.',
+     moves: ['Parity is a remainder question, not a division question.', '== compares; = assigns. In a condition you want ==.'],
+     note: '% asks "what is left" — and "nothing left" is what even means.'},
+    {id: 'j5q3', type: 'trace', diff: 'Core', title: 'Chain Reaction', tags: ['conditionals'],
+     code: progJ('int score = 75;\nif (score >= 90) {\n    System.out.println("A");\n} else if (score >= 80) {\n    System.out.println("B");\n} else if (score >= 70) {\n    System.out.println("C");\n} else {\n    System.out.println("F");\n}'),
+     question: 'What prints?',
+     choices: ['C', 'B', 'F', 'A, then C'],
+     answer: 0,
+     why: 'The chain tests top to bottom and stops at the first true condition: 75 fails >= 90 and >= 80, passes >= 70 — "C". The else never runs, and no second branch can fire.',
+     note: 'An else-if chain is a waterfall: the first true test catches everything, the rest run dry.'},
+    {id: 'j5q4', type: 'build', diff: 'Core', title: 'Sign Checker', tags: ['conditionals'],
+     prompt: 'An int n holds -4. Print "Positive" if it is above zero, "Negative" if below, and "Zero" if it is exactly zero:\nNegative',
+     starter: progJ('int n = -4;\n// A three-way branch.'),
+     solution: progJ('int n = -4;\nif (n > 0) {\n    System.out.println("Positive");\n} else if (n < 0) {\n    System.out.println("Negative");\n} else {\n    System.out.println("Zero");\n}'),
+     checks: [{type: 'output', lines: ['Negative']}],
+     hint: 'Three outcomes means a chain: if, else if, else. Zero is the case the first two tests both reject.',
+     moves: ['else if adds a test; the final else is "none of the above".', 'Order the tests so each value lands in exactly one branch.'],
+     note: 'A chain partitions the number line — every value gets exactly one home.'},
+    {id: 'j5q5', type: 'build', diff: 'Core', title: 'Weekend?', tags: ['conditionals'],
+     prompt: 'Days are numbered 1 (Mon) to 7 (Sun). An int day holds 6. Use a switch to print "Weekend" for days 6 and 7, and "Weekday" for everything else:\nWeekend\nLet the two weekend cases share one answer.',
+     starter: progJ('int day = 6;\n// switch on day.'),
+     solution: progJ('int day = 6;\nswitch (day) {\n    case 6:\n    case 7:\n        System.out.println("Weekend");\n        break;\n    default:\n        System.out.println("Weekday");\n}'),
+     checks: [{type: 'output', lines: ['Weekend']}],
+     hint: 'Stack the cases: case 6 with nothing under it falls into case 7\'s code. That fallthrough is a feature here.',
+     moves: ['Empty cases stack — several labels, one block of code.', 'break ends the switch; default is the catch-all.'],
+     note: 'Fallthrough is a leak — except when you stack labels on purpose to share one answer.'},
+    {id: 'j5q6', type: 'build', diff: 'Stretch', title: 'Biggest of Three', tags: ['conditionals'],
+     prompt: 'Three ints: a = 3, b = 9, c = 7. Using conditionals (no Math.max this time), print:\nMax: 9',
+     starter: progJ('int a = 3;\nint b = 9;\nint c = 7;\n// Crown the max.'),
+     solution: progJ('int a = 3;\nint b = 9;\nint c = 7;\nint max = a;\nif (b > max) {\n    max = b;\n}\nif (c > max) {\n    max = c;\n}\nSystem.out.println("Max: " + max);'),
+     checks: [{type: 'output', lines: ['Max: 9']}],
+     hint: 'Crown a champion, then let each challenger try to take the title: if (challenger > max) max = challenger;',
+     moves: ['The champion pattern: start with the first, challenge with the rest.', 'Two separate ifs — both challengers must get their shot.'],
+     note: 'Max-finding is a tournament: hold the current champion and let every value challenge it.'},
+    {id: 'j5q7', type: 'classify', diff: 'Core', title: 'The Runaway Print', tags: ['debugging', 'conditionals'], premise: 'runs', premiseOutput: ['B'],
+     code: progJ('boolean ok = false;\nif (ok)\n    System.out.println("A");\nSystem.out.println("B");'),
+     question: 'ok is false, so "A" is correctly skipped — but "B" prints anyway, even though it is indented as if the if controlled it. What kind of error is this?',
+     choices: ['Logic error — without braces, the if owns only the very next statement', 'Syntax error — an if without braces never compiles', 'Runtime error — boolean variables cannot be false'],
+     answer: 0,
+     why: 'Braces define the block. Without them, the if controls exactly one statement ("A"); "B" is a separate, unconditional statement and always prints. Perfectly legal, quietly wrong: a logic error.',
+     note: 'An if without braces holds exactly one statement — indentation is a lie the compiler does not read.'},
+    {id: 'j5q8', type: 'build', diff: 'Stretch', title: 'Ticket Price', tags: ['conditionals'],
+     prompt: 'An int age holds 15. Use the ternary operator to pick a ticket label — "Child $8" under 18, "Adult $12" otherwise — store it in a String, and print it:\nChild $8',
+     starter: progJ('int age = 15;\n// String ticket = condition ? ... : ...;'),
+     solution: progJ('int age = 15;\nString ticket = age < 18 ? "Child $8" : "Adult $12";\nSystem.out.println(ticket);'),
+     checks: [{type: 'output', lines: ['Child $8']}],
+     hint: 'condition ? valueIfTrue : valueIfFalse — the whole thing is an expression, so it can sit on the right side of =.',
+     moves: ['The ternary is an if that produces a value.', 'Both branches must have the same type — here, both are Strings.'],
+     note: 'if makes a decision; ?: makes a decision AND hands you the result.'},
+    {id: 'j5q9', type: 'trace', diff: 'Stretch', title: 'Short-Circuit', tags: ['conditionals', 'debugging'],
+     code: progJ('boolean a = false;\nif (a && (10 / 0 == 0)) {\n    System.out.println("Boom");\n} else {\n    System.out.println("Safe");\n}'),
+     question: 'There is a division by zero hiding in this code. What happens?',
+     choices: ['It prints Safe — the division never happens', 'It crashes — division by zero always explodes', 'It prints Boom', 'It does not compile'],
+     answer: 0,
+     why: '&& short-circuits: a is false, so the whole AND is already decided false — the right side, division included, is never evaluated. The else runs and prints "Safe".',
+     note: '&& is a lazy judge: the moment one side says false, the verdict is in and the other witness is never called.'},
+    {id: 'j5q10', type: 'build', diff: 'Boss', title: 'Grade and Comment', tags: ['conditionals'],
+     prompt: 'An int score holds 85. First, work out the letter grade with an if-chain (A ≥ 90, B ≥ 80, C ≥ 70, D ≥ 60, F below). Then use a switch on the letter to pick a comment: A "Excellent", B "Solid work", C "Fair", D "Needs work", F "See me". Print:\nGrade: B\nSolid work',
+     starter: progJ('int score = 85;\n// Chain for the letter, switch for the comment.'),
+     solution: progJ('int score = 85;\nString grade;\nif (score >= 90) {\n    grade = "A";\n} else if (score >= 80) {\n    grade = "B";\n} else if (score >= 70) {\n    grade = "C";\n} else if (score >= 60) {\n    grade = "D";\n} else {\n    grade = "F";\n}\nString comment;\nswitch (grade) {\n    case "A": comment = "Excellent"; break;\n    case "B": comment = "Solid work"; break;\n    case "C": comment = "Fair"; break;\n    case "D": comment = "Needs work"; break;\n    default: comment = "See me";\n}\nSystem.out.println("Grade: " + grade);\nSystem.out.println(comment);'),
+     checks: [{type: 'output', lines: ['Grade: B', 'Solid work']}],
+     hint: 'Two decisions in sequence: the chain turns a number into a letter; the switch turns the letter into a comment. Declare the Strings first, assign inside the branches.',
+     moves: ['A variable declared before the branches can be assigned inside any of them.', 'switch works on Strings in Java — cases are exact matches.'],
+     note: 'Programs are pipelines of decisions: each stage\'s output becomes the next stage\'s input.'}
+  ]
+},
+{
+  id: 'java-ch6', n: 6, icon: '🔁', title: 'Loops',
+  sub: 'Repetition with intent: for, while, do-while — and the off-by-one errors that haunt them.',
+  objectives: 'CSCI-241 CS 3–4, 6: repetition structures; choosing the right loop; boundary and off-by-one errors.',
+  teach: {
+    body: 'Loops turn one idea into many executions. for is built for counted repetition (you know the range); while repeats on a condition (you know the stop rule); do-while guarantees at least one run because it tests at the bottom. Every loop bug in this chapter is one of three: the condition is wrong at the boundary (off-by-one), the update is missing (infinite), or the accumulator starts at the wrong value.',
+    points: ['for (start; condition; update) — the condition is checked BEFORE each pass, including the first.', '< vs <= is one whole repetition — the most expensive character in the language.', 'An accumulator starts at the identity: 0 for sums, 1 for products.', 'Sentinel loops read until a special value says stop — the sentinel is data, not counted.']
+  },
+  questions: [
+    {id: 'j6q1', type: 'build', diff: 'Warm-up', title: 'Countdown', tags: ['loops'],
+     prompt: 'With a for loop, print the countdown — each number on its own line — then the launch:\n5\n4\n3\n2\n1\nBlast off!',
+     starter: progJ('// Count down from 5, then blast off.'),
+     solution: progJ('for (int i = 5; i >= 1; i--) {\n    System.out.println(i);\n}\nSystem.out.println("Blast off!");'),
+     checks: [{type: 'output', lines: ['5', '4', '3', '2', '1', 'Blast off!']}],
+     hint: 'Counting down means the update is i-- and the condition keeps i >= 1.',
+     moves: ['A for loop can count in either direction.', 'Start, condition, update — pick all three to match the sequence you want.'],
+     note: 'The for header is the whole loop in miniature: where it starts, when it stops, how it steps.'},
+    {id: 'j6q2', type: 'build', diff: 'Warm-up', title: 'Sum 1 to 100', tags: ['loops'],
+     prompt: 'Add up every number from 1 to 100 with a loop and print:\nSum: 5050',
+     starter: progJ('// Accumulate the sum in a loop.'),
+     solution: progJ('int sum = 0;\nfor (int i = 1; i <= 100; i++) {\n    sum += i;\n}\nSystem.out.println("Sum: " + sum);'),
+     checks: [{type: 'output', lines: ['Sum: 5050']}],
+     hint: 'An accumulator outside the loop, += inside it. i <= 100 — the 100 must be included.',
+     moves: ['Accumulators are declared BEFORE the loop and printed AFTER it.', 'sum += i is sum = sum + i.'],
+     note: 'A loop accumulator is a snowball: it must exist before the rolling starts and keep everything it picks up.'},
+    {id: 'j6q3', type: 'trace', diff: 'Core', title: 'Off By One', tags: ['loops', 'debugging'],
+     code: progJ('for (int i = 0; i < 4; i++) {\n    System.out.println(i);\n}'),
+     question: 'How many lines print, and what is the last one?',
+     choices: ['4 lines, last is 3', '4 lines, last is 4', '5 lines, last is 4', '3 lines, last is 2'],
+     answer: 0,
+     why: 'i takes 0, 1, 2, 3 — the condition i < 4 fails at i = 4, before printing. Starting at 0 with a < condition gives exactly (limit) passes, ending one below the limit.',
+     note: '0-start plus < is a matched pair: the count is the limit, the last value is limit minus one.'},
+    {id: 'j6q4', type: 'build', diff: 'Core', title: 'Times Table', tags: ['loops'],
+     prompt: 'Print the first five lines of the 6 times table, exactly in this shape:\n6 x 1 = 6\n6 x 2 = 12\n6 x 3 = 18\n6 x 4 = 24\n6 x 5 = 30',
+     starter: progJ('// Loop i from 1 to 5.'),
+     solution: progJ('int n = 6;\nfor (int i = 1; i <= 5; i++) {\n    System.out.println(n + " x " + i + " = " + (n * i));\n}'),
+     checks: [{type: 'output', lines: ['6 x 1 = 6', '6 x 2 = 12', '6 x 3 = 18', '6 x 4 = 24', '6 x 5 = 30']}],
+     hint: 'Each line glues n, " x ", i, " = ", and the product in parentheses — the product must be math, not glue.',
+     moves: ['The loop variable is part of the output AND part of the computation.', 'Parenthesize (n * i) so it computes before gluing.'],
+     note: 'In a table loop, the counter is both the row label and an ingredient of the row.'},
+    {id: 'j6q5', type: 'build', diff: 'Core', title: 'Even Countdown', tags: ['loops'],
+     prompt: 'With a while loop, print the even numbers counting down from 10, one per line:\n10\n8\n6\n4\n2',
+     starter: progJ('int i = 10;\n// While-loop down by twos.'),
+     solution: progJ('int i = 10;\nwhile (i >= 2) {\n    System.out.println(i);\n    i -= 2;\n}'),
+     checks: [{type: 'output', lines: ['10', '8', '6', '4', '2']}],
+     hint: 'Step by 2: i -= 2 inside the loop. The update is yours to write — while loops have no built-in step.',
+     moves: ['while = condition + body + an update YOU must not forget.', 'Step size is part of the design: -= 2 skips the odds entirely.'],
+     note: 'A while loop is a for loop with the machinery spread out — and the update is the part everyone forgets.'},
+    {id: 'j6q6', type: 'build', diff: 'Stretch', title: 'Sentinel Sum', tags: ['loops', 'input-output'], input: ['4 8 15 0'],
+     prompt: 'The user types numbers ending with 0 (shown above the editor). Read until the 0, add up everything before it, and print:\nTotal: 27\nThe 0 is the stop signal — it is not part of the sum.',
+     starter: scanStarter('// Read, add, repeat until 0.'),
+     solution: scanProg('int total = 0;\nint n = sc.nextInt();\nwhile (n != 0) {\n    total += n;\n    n = sc.nextInt();\n}\nSystem.out.println("Total: " + total);'),
+     checks: [{type: 'output', lines: ['Total: 27']}],
+     hint: 'Read once before the loop, then read again at the bottom of each pass — the "priming read" pattern, so the 0 is tested before it is ever added.',
+     moves: ['Prime: read before the loop so the condition can test real data.', 'The sentinel is checked, never processed.'],
+     note: 'Sentinel loops ask "another?" with the data itself — the stop value is part of the stream, not the math.'},
+    {id: 'j6q7', type: 'classify', diff: 'Core', title: 'The Loop That Never Ends', tags: ['debugging', 'loops'], premise: 'no-finish',
+     code: progJ('int i = 0;\nwhile (i < 5) {\n    System.out.println(i);\n}'),
+     question: 'This program prints 0 forever and has to be killed. The condition looks reasonable — so what kind of error is it?',
+     choices: ['Logic error — the loop body never changes i, so the condition can never become false', 'Syntax error — while loops are not allowed to print', 'Runtime error — printing the same number twice crashes Java'],
+     answer: 0,
+     why: 'Nothing is misspelled and nothing crashes: the program does exactly what it says, forever. i is never updated inside the body, so i < 5 stays true eternally. An infinite loop from a missing update is a logic error.',
+     note: 'A loop is a promise that something changes each pass — break the promise and the condition can never save you.'},
+    {id: 'j6q8', type: 'build', diff: 'Stretch', title: 'Unlock Attempts', tags: ['loops', 'input-output'], input: ['3 9 7'],
+     prompt: 'A phone unlock code is 7. The user\'s guesses arrive as input (shown above the editor): 3, then 9, then 7. With a do-while loop, keep reading guesses until the right one, counting attempts. Print:\nUnlocked\nAttempts: 3',
+     starter: scanStarter('// do-while: guess, count, test.'),
+     solution: scanProg('int guess;\nint attempts = 0;\ndo {\n    guess = sc.nextInt();\n    attempts++;\n} while (guess != 7);\nSystem.out.println("Unlocked");\nSystem.out.println("Attempts: " + attempts);'),
+     checks: [{type: 'output', lines: ['Unlocked', 'Attempts: 3']}],
+     hint: 'do-while fits perfectly: you must guess at least once before there is anything to test. The counter increments inside the body.',
+     moves: ['do-while tests at the bottom — the body always runs at least once.', 'Declare guess outside: the condition needs it after the body.'],
+     note: 'Pick do-while when the test needs something the body produces — try first, judge after.'},
+    {id: 'j6q9', type: 'build', diff: 'Stretch', title: 'Star Grid', tags: ['loops'],
+     prompt: 'Print a 3 by 3 grid of stars using nested loops (an inner loop builds each row):\n***\n***\n***',
+     starter: progJ('// Build each row with an inner loop.'),
+     solution: progJ('for (int row = 0; row < 3; row++) {\n    String line = "";\n    for (int col = 0; col < 3; col++) {\n        line += "*";\n    }\n    System.out.println(line);\n}'),
+     checks: [{type: 'output', lines: ['***', '***', '***']}],
+     hint: 'The inner loop appends to a String; printing happens once per row, after the inner loop finishes. Reset the row string each outer pass.',
+     moves: ['Nested loops: the inner one runs fully for every single outer step.', 'Accumulate a row, print the row — two different rhythms.'],
+     note: 'Nested loops are gears: the small gear spins completely for every tooth of the big one.'},
+    {id: 'j6q10', type: 'build', diff: 'Boss', title: 'Factorial', tags: ['loops'],
+     prompt: 'Compute 5! (5 factorial = 5 × 4 × 3 × 2 × 1) with a loop and print:\n5! = 120',
+     starter: progJ('// A product accumulator this time.'),
+     solution: progJ('int result = 1;\nfor (int i = 2; i <= 5; i++) {\n    result *= i;\n}\nSystem.out.println("5! = " + result);'),
+     checks: [{type: 'output', lines: ['5! = 120']}],
+     hint: 'A product accumulator starts at 1, not 0 — starting at 0 would erase every multiplication.',
+     moves: ['Products accumulate from 1; sums accumulate from 0.', 'result *= i folds each number into the running product.'],
+     note: 'Every accumulator starts at its identity: the value that changes nothing — 0 for +, 1 for ×.'}
+  ]
+},
+{
+  id: 'java-ch7', n: 7, icon: '🧩', title: 'Methods & Modular Design',
+  sub: 'Break the problem into named pieces: parameters in, values back, one job per method.',
+  objectives: 'CSCI-241 MD 1–6: decomposition; parameters; return types; void vs value-returning; reuse.',
+  teach: {
+    body: 'Methods are how programs stay sane as they grow: one method, one job, a name that says it. A value-returning method is a question with an answer (declare the return type, return the value); a void method is an instruction (it does something, hands nothing back). Parameters are the method\'s inputs — its own private variables, born fresh on every call. Code outside the method cannot see inside it, and that wall is the point.',
+    points: ['The signature is a contract: name, parameter types, return type.', 'return ends the method immediately and hands the value to the caller.', 'Arguments are copied into parameters — a method cannot change the caller\'s variables.', 'If main is growing past a screen, it is asking to be decomposed.']
+  },
+  questions: [
+    {id: 'j7q1', type: 'build', diff: 'Warm-up', title: 'The Greeter Method', tags: ['methods'],
+     prompt: 'Write a method greet that takes a String name and prints "Hello, <name>!" — then call it from main with "Ana" and "Ben":\nHello, Ana!\nHello, Ben!',
+     starter: clsJ('// static void greet(String name) goes here.', 'greet("Ana");\ngreet("Ben");'),
+     solution: clsJ('    static void greet(String name) {\n        System.out.println("Hello, " + name + "!");\n    }', 'greet("Ana");\ngreet("Ben");'),
+     checks: [{type: 'output', lines: ['Hello, Ana!', 'Hello, Ben!']}],
+     hint: 'void means the method does a job and hands nothing back. The name arrives as the parameter — a variable that exists only inside greet.',
+     moves: ['static void greet(String name) — the signature states the contract.', 'Write it once, call it twice: reuse is the whole point.'],
+     note: 'A method is a recipe written once: the parameter is the ingredient slot, each call cooks it again.'},
+    {id: 'j7q2', type: 'build', diff: 'Warm-up', title: 'Square It', tags: ['methods'],
+     prompt: 'Write a method square that takes an int and RETURNS its square. main calls it with 7 and prints:\nSquare: 49',
+     starter: clsJ('// static int square(int n) goes here.', 'System.out.println("Square: " + square(7));'),
+     solution: clsJ('    static int square(int n) {\n        return n * n;\n    }', 'System.out.println("Square: " + square(7));'),
+     checks: [{type: 'output', lines: ['Square: 49']}],
+     hint: 'The return type in the signature is int, and the body must return an int. The call square(7) IS a value — it can sit inside the println.',
+     moves: ['A value-returning method must return on every path.', 'Calls are expressions: use them anywhere a value fits.'],
+     note: 'void methods are verbs; value-returning methods are nouns — they stand for the thing they compute.'},
+    {id: 'j7q3', type: 'trace', diff: 'Core', title: 'Trace the Call', tags: ['methods'],
+     code: clsJ('    static int add(int a, int b) {\n        return a + b;\n    }', 'int r = add(3, 4);\nSystem.out.println(r * 2);'),
+     question: 'What prints?',
+     choices: ['14', '7', '34', 'Nothing — add is never used'],
+     answer: 0,
+     why: 'add(3, 4) runs with a = 3, b = 4 and returns 7. That 7 lands in r, and main prints r * 2 = 14. The method\'s variables live and die inside the call.',
+     note: 'A call is a detour: jump in with the arguments, come back with the return value, continue where you left off.'},
+    {id: 'j7q4', type: 'build', diff: 'Core', title: 'Is It Even?', tags: ['methods'],
+     prompt: 'Write a method isEven that takes an int and returns a boolean — true exactly when the number is even. main asks about 10 and prints:\n10 is even: true',
+     starter: clsJ('// static boolean isEven(int n) goes here.', 'System.out.println("10 is even: " + isEven(10));'),
+     solution: clsJ('    static boolean isEven(int n) {\n        return n % 2 == 0;\n    }', 'System.out.println("10 is even: " + isEven(10));'),
+     checks: [{type: 'output', lines: ['10 is even: true']}],
+     hint: 'n % 2 == 0 is already a boolean — you can return the condition itself, no if needed.',
+     moves: ['A condition IS a boolean value — return it directly.', 'Predicate methods (is…, has…, can…) answer yes/no questions.'],
+     note: 'When the body is one condition, the method is just giving that condition a name.'},
+    {id: 'j7q5', type: 'build', diff: 'Core', title: 'Max Method', tags: ['methods', 'conditionals'],
+     prompt: 'Write a method max2 that takes two ints and returns the larger. main calls it with 8 and 3 and prints:\nMax: 8',
+     starter: clsJ('// static int max2(int a, int b) goes here.', 'System.out.println("Max: " + max2(8, 3));'),
+     solution: clsJ('    static int max2(int a, int b) {\n        if (a > b) {\n            return a;\n        }\n        return b;\n    }', 'System.out.println("Max: " + max2(8, 3));'),
+     checks: [{type: 'output', lines: ['Max: 8']}],
+     hint: 'return ends the method on the spot — after return a, the second return only runs when the if was false.',
+     moves: ['Early return: handle a case, hand back the answer, done.', 'Every path through a value-returning method must return.'],
+     note: 'return is the exit door: walking through it ends the method, whatever comes after never runs.'},
+    {id: 'j7q6', type: 'build', diff: 'Stretch', title: 'Celsius, As a Method', tags: ['methods', 'types-conversion'],
+     prompt: 'Chapter 2\'s conversion, promoted to a method: write toCelsius, which takes a double Fahrenheit and returns the Celsius value. main converts 68 and prints with printf:\nCelsius: 20.0',
+     starter: clsJ('// static double toCelsius(double f) goes here.', 'System.out.printf("Celsius: %.1f", toCelsius(68));'),
+     solution: clsJ('    static double toCelsius(double f) {\n        return (f - 32) * 5.0 / 9;\n    }', 'System.out.printf("Celsius: %.1f", toCelsius(68));'),
+     checks: [{type: 'output', lines: ['Celsius: 20.0']}],
+     hint: 'The formula is the same as Chapter 2 — the method just wraps it. The 5.0 keeps the math decimal.',
+     moves: ['A formula used twice deserves a name and a home: a method.', 'The caller should not care how the answer is computed.'],
+     note: 'Methods turn formulas into vocabulary: after this, the program can say toCelsius instead of spelling out the math.'},
+    {id: 'j7q7', type: 'classify', diff: 'Core', title: 'Out of Scope', tags: ['debugging', 'methods'], premise: 'error',
+     code: clsJ('    static void show() {\n        System.out.println(count);\n    }', 'int count = 3;\nshow();'),
+     question: 'show tries to print count, which lives in main. The compiler refuses: "cannot find symbol". What kind of error is this — and what is the deeper lesson?',
+     choices: ['Syntax (compile) error — a method can only see its own parameters and variables', 'Runtime error — show ran before count existed', 'Logic error — the value printed would have been wrong'],
+     answer: 0,
+     why: 'count is a local of main; show is a different method with its own scope. The compiler catches the invisible variable before anything runs — a compile error. The fix is to pass count in as a parameter: data crosses method walls through parameters and return values, or not at all.',
+     note: 'Method walls are real: values cross as arguments and returns — never by reaching through.'},
+    {id: 'j7q8', type: 'build', diff: 'Stretch', title: 'Count the Letter', tags: ['methods', 'loops', 'strings'],
+     prompt: 'Write a method countChar that takes a String and a char, and returns how many times that char appears. main counts the a\'s in "banana" and prints:\nCount: 3',
+     starter: clsJ('// static int countChar(String s, char target) goes here.', 'System.out.println("Count: " + countChar("banana", \'a\'));'),
+     solution: clsJ('    static int countChar(String s, char target) {\n        int count = 0;\n        for (int i = 0; i < s.length(); i++) {\n            if (s.charAt(i) == target) {\n                count++;\n            }\n        }\n        return count;\n    }', 'System.out.println("Count: " + countChar("banana", \'a\'));'),
+     checks: [{type: 'output', lines: ['Count: 3']}],
+     hint: 'Walk the string with an index, compare s.charAt(i) to the target, and count the matches — the counting pattern, inside a method.',
+     moves: ['Two parameters: the haystack and the needle.', 'The accumulator lives inside the method and leaves as the return value.'],
+     note: 'Patterns travel: counting matches works the same whether the method gets a string, an array, or a file.'},
+    {id: 'j7q9', type: 'build', diff: 'Stretch', title: 'Repeat After Me', tags: ['methods', 'loops'],
+     prompt: 'Write a method repeat that takes a String and an int n, and returns the string repeated n times. main prints repeat("ha", 3):\nhahaha',
+     starter: clsJ('// static String repeat(String w, int n) goes here.', 'System.out.println(repeat("ha", 3));'),
+     solution: clsJ('    static String repeat(String w, int n) {\n        String out = "";\n        for (int i = 0; i < n; i++) {\n            out += w;\n        }\n        return out;\n    }', 'System.out.println(repeat("ha", 3));'),
+     checks: [{type: 'output', lines: ['hahaha']}],
+     hint: 'A String accumulator starts empty ("") and grows with += once per pass.',
+     moves: ['Strings accumulate too — the identity for gluing is "".', 'Build the result, then return it once at the end.'],
+     note: 'Same snowball as numbers, different substance: start empty, roll n times, hand over the ball.'},
+    {id: 'j7q10', type: 'build', diff: 'Boss', title: 'Grade Report', tags: ['methods', 'conditionals'],
+     prompt: 'Build a two-method grade report. letterFor takes an int score and returns the letter (A ≥ 90, B ≥ 80, C ≥ 70, D ≥ 60, F below) as a String. commentFor takes the letter and returns a comment (A "Excellent", B "Solid work", C "Fair", D "Needs work", F "See me") — a switch is natural. main reports on 91:\nGrade: A\nExcellent',
+     starter: clsJ('// letterFor and commentFor go here.', 'int score = 91;\n// Report on the score.'),
+     solution: clsJ('    static String letterFor(int score) {\n        if (score >= 90) {\n            return "A";\n        } else if (score >= 80) {\n            return "B";\n        } else if (score >= 70) {\n            return "C";\n        } else if (score >= 60) {\n            return "D";\n        }\n        return "F";\n    }\n    static String commentFor(String grade) {\n        switch (grade) {\n            case "A": return "Excellent";\n            case "B": return "Solid work";\n            case "C": return "Fair";\n            case "D": return "Needs work";\n            default: return "See me";\n        }\n    }', 'int score = 91;\nString grade = letterFor(score);\nSystem.out.println("Grade: " + grade);\nSystem.out.println(commentFor(grade));'),
+     checks: [{type: 'output', lines: ['Grade: A', 'Excellent']}],
+     hint: 'Chapter 5\'s two decisions, factored into methods: the chain becomes letterFor, the switch becomes commentFor, and main just conducts.',
+     moves: ['Decomposition: each method owns exactly one decision.', 'main reads like a summary — the details live in the methods.'],
+     note: 'Good main methods read like a table of contents: the chapters are the methods below it.'}
+  ]
+},
+{
+  id: 'java-ch8', n: 8, icon: '🗂️', title: 'Arrays',
+  sub: 'One name, many slots: declare, traverse, search, count, and never step past the end.',
+  objectives: 'CSCI-241 DC 1–3, 5: arrays; loop processing (search/count/sum/min/max/average); index errors.',
+  teach: {
+    body: 'An array is a row of slots under one name, indexed from 0 — so a length-n array lives at indexes 0 … n-1, and index n is the classic runtime crash. Almost everything you do with arrays is one traversal pattern wearing different clothes: visit every slot and sum, count, find the extreme, or search. The enhanced for (for (int x : a)) visits values when you do not need positions; the indexed for is for when you do.',
+    points: ['a.length is the size; the last legal index is a.length - 1.', 'Traverse with intent: every array loop is sum, count, search, or extreme in disguise.', 'Enhanced for reads values only — it cannot change slots or tell you where you are.', 'An array variable holds a reference to the slots — pass it to a method and the method sees the same slots.']
+  },
+  questions: [
+    {id: 'j8q1', type: 'build', diff: 'Warm-up', title: 'First and Last', tags: ['arrays'],
+     prompt: 'An array is declared: int[] nums = {4, 8, 15, 16, 23}; Print its first and last elements:\nFirst: 4\nLast: 23\nThe last one must be found through the array\'s length — not by typing 4 as the index.',
+     starter: progJ('int[] nums = {4, 8, 15, 16, 23};\n// Print first and last.'),
+     solution: progJ('int[] nums = {4, 8, 15, 16, 23};\nSystem.out.println("First: " + nums[0]);\nSystem.out.println("Last: " + nums[nums.length - 1]);'),
+     checks: [{type: 'output', lines: ['First: 4', 'Last: 23']}],
+     hint: 'The last index is always length - 1, whatever the length turns out to be.',
+     moves: ['nums[0] is the first slot; nums[nums.length - 1] is the last.', 'Never hardcode the last index — lengths change.'],
+     note: 'First is 0 and last is length minus one — the two addresses every array guarantees.'},
+    {id: 'j8q2', type: 'build', diff: 'Warm-up', title: 'Sum the Array', tags: ['arrays', 'loops'],
+     prompt: 'Given int[] values = {3, 5, 7, 9}, traverse it and print the total:\nSum: 24',
+     starter: progJ('int[] values = {3, 5, 7, 9};\n// Traverse and total.'),
+     solution: progJ('int[] values = {3, 5, 7, 9};\nint sum = 0;\nfor (int v : values) {\n    sum += v;\n}\nSystem.out.println("Sum: " + sum);'),
+     checks: [{type: 'output', lines: ['Sum: 24']}],
+     hint: 'The enhanced for hands you each value in turn — perfect when you do not need the index. Accumulate as usual.',
+     moves: ['Enhanced for: for (int v : values) — v is each value, in order.', 'The sum pattern again: accumulator outside, += inside.'],
+     note: 'for-each is a conveyor belt: every slot passes by exactly once, in order.'},
+    {id: 'j8q3', type: 'trace', diff: 'Core', title: 'Index Walk', tags: ['arrays'],
+     code: progJ('int[] a = {10, 20, 30};\nSystem.out.println(a[1]);\na[1] = 99;\nSystem.out.println(a[1]);'),
+     question: 'What two lines print?',
+     choices: ['20, then 99', '10, then 99', '20, then 20', '30, then 99'],
+     answer: 0,
+     why: 'a[1] is the SECOND slot (indexes start at 0), holding 20. The assignment a[1] = 99 overwrites that slot, so the second print shows 99. Index 0 and 2 were never touched.',
+     note: 'An index is an address: reading it copies the value out, assigning replaces what lives there.'},
+    {id: 'j8q4', type: 'build', diff: 'Core', title: 'Find the Max', tags: ['arrays', 'loops'],
+     prompt: 'Given int[] data = {12, 45, 7, 34}, find and print the largest value:\nMax: 45\nStart your champion at the first element — not at 0 (ask yourself why 0 would be a lie for an all-negative array).',
+     starter: progJ('int[] data = {12, 45, 7, 34};\n// Crown the max.'),
+     solution: progJ('int[] data = {12, 45, 7, 34};\nint max = data[0];\nfor (int i = 1; i < data.length; i++) {\n    if (data[i] > max) {\n        max = data[i];\n    }\n}\nSystem.out.println("Max: " + max);'),
+     checks: [{type: 'output', lines: ['Max: 45']}],
+     hint: 'Chapter 5\'s tournament, on an array: champion starts at data[0], every later slot challenges.',
+     moves: ['Seed the extreme with a real element: data[0].', 'Loop from index 1 — the seed slot needs no challenge.'],
+     note: 'Extremes start from evidence (the first element), never from a guess like 0.'},
+    {id: 'j8q5', type: 'build', diff: 'Core', title: 'Count the Passes', tags: ['arrays', 'loops', 'conditionals'],
+     prompt: 'Given int[] scores = {55, 80, 92, 40, 71}, count how many are passing (60 or above) and print:\nPassing: 3',
+     starter: progJ('int[] scores = {55, 80, 92, 40, 71};\n// Count the passing scores.'),
+     solution: progJ('int[] scores = {55, 80, 92, 40, 71};\nint count = 0;\nfor (int s : scores) {\n    if (s >= 60) {\n        count++;\n    }\n}\nSystem.out.println("Passing: " + count);'),
+     checks: [{type: 'output', lines: ['Passing: 3']}],
+     hint: 'The counting pattern: a counter, a traversal, and a condition guarding the ++.',
+     moves: ['Count = traverse + test + increment, only on a match.', 'The boundary is >= 60 — 60 itself passes.'],
+     note: 'Counting is summing with a filter: add 1 only when the slot earns it.'},
+    {id: 'j8q6', type: 'build', diff: 'Stretch', title: 'Reverse Print', tags: ['arrays', 'loops'],
+     prompt: 'Given int[] nums = {1, 2, 3, 4}, print the elements backwards, one per line:\n4\n3\n2\n1\nThe array itself stays untouched — you are only visiting in reverse.',
+     starter: progJ('int[] nums = {1, 2, 3, 4};\n// Walk it backwards.'),
+     solution: progJ('int[] nums = {1, 2, 3, 4};\nfor (int i = nums.length - 1; i >= 0; i--) {\n    System.out.println(nums[i]);\n}'),
+     checks: [{type: 'output', lines: ['4', '3', '2', '1']}],
+     hint: 'Start the index at length - 1 and step down while i >= 0. Enhanced for cannot do this — it only walks forward.',
+     moves: ['Reverse traversal needs the indexed for: start high, i--, stop at 0.', 'Visiting is not modifying: the array is unchanged.'],
+     note: 'Need positions or direction? Indexed for. Just values, forward? For-each.'},
+    {id: 'j8q7', type: 'classify', diff: 'Core', title: 'One Past the End', tags: ['debugging', 'arrays'], premise: 'error',
+     code: progJ('int[] a = {5, 6, 7};\nSystem.out.println(a[3]);'),
+     question: 'This compiles cleanly — then dies the moment it runs, with ArrayIndexOutOfBoundsException. What kind of error is that?',
+     choices: ['Runtime error — the index crime is only detectable while the program runs', 'Syntax error — arrays may never be printed', 'Logic error — it printed the wrong element'],
+     answer: 0,
+     why: 'Indexes run 0, 1, 2 for a 3-element array; a[3] asks for a slot that does not exist. The code is grammatical, so the compiler waves it through — the crash happens at runtime, when the access is attempted.',
+     note: 'The compiler checks your grammar, not your geography: stepping outside the array is a runtime discovery.'},
+    {id: 'j8q8', type: 'build', diff: 'Stretch', title: 'Array Average', tags: ['arrays', 'loops', 'types-conversion'],
+     prompt: 'Given int[] temps = {70, 80, 90, 86}, compute the average (a decimal!) and print it with printf:\nAverage: 81.5',
+     starter: progJ('int[] temps = {70, 80, 90, 86};\n// Sum, then divide — carefully.'),
+     solution: progJ('int[] temps = {70, 80, 90, 86};\nint sum = 0;\nfor (int t : temps) {\n    sum += t;\n}\ndouble avg = (double) sum / temps.length;\nSystem.out.printf("Average: %.1f", avg);'),
+     checks: [{type: 'output', lines: ['Average: 81.5']}],
+     hint: 'Sum as an int, then cast before dividing — and divide by temps.length, never a hardcoded 4.',
+     moves: ['Average = sum / length, with the cast placed before the division.', 'temps.length keeps the code honest if the data changes.'],
+     note: 'Every array statistic is a traversal plus one final calculation — and the length comes from the array, not from you.'},
+    {id: 'j8q9', type: 'build', diff: 'Stretch', title: 'Roll Call', tags: ['arrays', 'strings'],
+     prompt: 'A String array holds the class roster: {"Ana", "Ben", "Cleo"}. With an enhanced for, print each name on its own line, then the class size:\nAna\nBen\nCleo\nStudents: 3',
+     starter: progJ('String[] names = {"Ana", "Ben", "Cleo"};\n// Roll call, then the count.'),
+     solution: progJ('String[] names = {"Ana", "Ben", "Cleo"};\nfor (String name : names) {\n    System.out.println(name);\n}\nSystem.out.println("Students: " + names.length);'),
+     checks: [{type: 'output', lines: ['Ana', 'Ben', 'Cleo', 'Students: 3']}],
+     hint: 'Arrays of objects work exactly like arrays of ints — the element type in the for-each is String here.',
+     moves: ['for (String name : names) — the loop variable takes the element type.', 'names.length counts the slots, filled or not.'],
+     note: 'The traversal patterns are type-blind: once you can walk an int array, you can walk any array.'},
+    {id: 'j8q10', type: 'build', diff: 'Boss', title: 'Search Party', tags: ['arrays', 'loops'],
+     prompt: 'Given int[] ids = {101, 205, 309, 412}, search for the value 309 and print the index where it lives:\nFound at index: 2\nUse a loop and stop the moment you find it (break) — and find the index by searching, not by knowing it in advance.',
+     starter: progJ('int[] ids = {101, 205, 309, 412};\n// Search for 309.'),
+     solution: progJ('int[] ids = {101, 205, 309, 412};\nint found = -1;\nfor (int i = 0; i < ids.length; i++) {\n    if (ids[i] == 309) {\n        found = i;\n        break;\n    }\n}\nSystem.out.println("Found at index: " + found);'),
+     checks: [{type: 'output', lines: ['Found at index: 2']}],
+     hint: 'Keep a found variable starting at -1 ("nowhere yet"). On a match, record the index and break — searching past the find wastes nothing but time.',
+     moves: ['-1 is the "not found" sentinel: no real index can be negative.', 'break exits the loop the instant the search succeeds.'],
+     note: 'Search = traverse + compare + remember where. The index is the prize, not the value.'}
+  ]
+},
+{
+  id: 'java-ch9', n: 9, icon: '🏆', title: 'Foundations Gauntlet',
+  sub: 'Everything at once: plan first, then code — mixed problems in the shape of real coursework.',
+  objectives: 'CSCI-241 ALG 1–5 + TD 1–4: plan with pseudocode; accumulation, counting, searching, validation; test normal, edge, boundary and invalid cases.',
+  teach: {
+    body: 'Real problems do not announce which chapter they are from. The gauntlet mixes everything: input, types, strings, branches, loops, methods, arrays — plus the testing mindset the course grades: before you run, predict; when it breaks, classify (syntax? runtime? logic?) before you touch anything. And plan first: two lines of pseudocode ("read values until sentinel; track count and sum; print the average") are worth twenty lines of wandering code.',
+    points: ['Plan in pseudocode: name the pattern (accumulate? count? search? validate?) before writing Java.', 'Trace before you run — a prediction turns every run into a test.', 'When it breaks, classify first: the error KIND tells you where to look.', 'Test the boundary and the edge, not just the happy middle.']
+  },
+  questions: [
+    {id: 'j9q1', type: 'build', diff: 'Warm-up', title: 'Two Numbers, Full Treatment', tags: ['input-output', 'types-conversion'], input: ['3 4'],
+     prompt: 'The user types two whole numbers: 3 4. Read both and print:\nSum: 7\nAverage: 3.5\nThe average is a decimal — divide carelessly and it will lie.',
+     starter: scanStarter('// Read both, print sum and average.'),
+     solution: scanProg('int a = sc.nextInt();\nint b = sc.nextInt();\nSystem.out.println("Sum: " + (a + b));\nSystem.out.println("Average: " + ((a + b) / 2.0));'),
+     checks: [{type: 'output', lines: ['Sum: 7', 'Average: 3.5']}],
+     hint: 'The sum is int math; the average needs a decimal divisor — / 2.0, or a cast. Same parentheses discipline as always.',
+     moves: ['One input, two treatments: int for the sum, decimal for the average.', 'The cast (or .0) goes on the division, not on the answer.'],
+     note: 'The same numbers can need two types in one program — the operation decides, not the value.'},
+    {id: 'j9q2', type: 'trace', diff: 'Core', title: 'Everything at Once', tags: ['arrays', 'loops'],
+     code: progJ('int[] a = {2, 4, 6};\nint s = 0;\nfor (int x : a) {\n    s += x;\n}\nSystem.out.println(s);'),
+     question: 'What prints?',
+     choices: ['12', '246', '6', 'Nothing — arrays cannot be looped'],
+     answer: 0,
+     why: 'The enhanced for visits 2, 4, 6 in order; the accumulator collects 0 + 2 + 4 + 6 = 12. One pass, three additions.',
+     note: 'Fluency is when the patterns stop announcing themselves: array + loop + accumulator reads as one idea.'},
+    {id: 'j9q3', type: 'classify', diff: 'Core', title: 'Boundary Blunder', tags: ['debugging', 'loops'], premise: 'runs', premiseOutput: ['0', '1', '2', '3', '4', '5'],
+     code: progJ('for (int i = 0; i <= 5; i++) {\n    System.out.println(i);\n}'),
+     question: 'The goal was to print 0 through 4 — five lines. The program prints six, ending at 5. It compiles and runs to completion. What kind of error is this?',
+     choices: ['Logic error — <= lets i reach 5; the boundary condition is one too generous', 'Syntax error — <= is not a legal operator', 'Runtime error — the loop ran too many times and crashed'],
+     answer: 0,
+     why: 'Nothing crashed and nothing is misspelled: the condition i <= 5 faithfully includes 5. The instruction itself is wrong by one — the textbook off-by-one logic error, caught only by testing the boundary.',
+     note: 'Off-by-one never crashes and never complains: it just quietly does one too many (or one too few).'},
+    {id: 'j9q4', type: 'build', diff: 'Core', title: 'Password Gate', tags: ['input-output', 'loops'], input: ['0000 1234'],
+     prompt: 'The gate code is 1234. Guesses arrive as input: 0000, then 1234. Keep reading guesses until the right one (compare with equals — these are Strings), count the attempts, and print:\nAttempts: 2\nWelcome',
+     starter: scanStarter('// Read guesses until "1234".'),
+     solution: scanProg('String guess = sc.next();\nint attempts = 1;\nwhile (!guess.equals("1234")) {\n    guess = sc.next();\n    attempts++;\n}\nSystem.out.println("Attempts: " + attempts);\nSystem.out.println("Welcome");'),
+     checks: [{type: 'output', lines: ['Attempts: 2', 'Welcome']}],
+     hint: 'The priming-read pattern again, with strings: read once, then loop while the guess is NOT equal — !guess.equals("1234").',
+     moves: ['String comparison in a condition still uses equals — == would compare boxes.', 'Validation loops run until the input earns its way out.'],
+     note: 'A validation loop is a bouncer: the condition is "not yet", and the input has to change it.'},
+    {id: 'j9q5', type: 'build', diff: 'Core', title: 'Method Mixer', tags: ['methods', 'types-conversion'],
+     prompt: 'Write a method average3 that takes three ints and returns their average as a double. main averages 80, 90 and 100 and prints with printf:\nAverage: 90.0',
+     starter: clsJ('// static double average3(int a, int b, int c) goes here.', 'System.out.printf("Average: %.1f", average3(80, 90, 100));'),
+     solution: clsJ('    static double average3(int a, int b, int c) {\n        return (a + b + c) / 3.0;\n    }', 'System.out.printf("Average: %.1f", average3(80, 90, 100));'),
+     checks: [{type: 'output', lines: ['Average: 90.0']}],
+     hint: 'Inside the method, the divisor decides the type: / 3.0 keeps the fraction; / 3 would truncate before the double ever saw it.',
+     moves: ['The return type is a promise — the math inside must honor it.', 'Chapter 2\'s division trap lives inside methods too.'],
+     note: 'Wrapping math in a method does not protect it from the old rules — types are types everywhere.'},
+    {id: 'j9q6', type: 'classify', diff: 'Core', title: 'The Null Call', tags: ['debugging', 'strings'], premise: 'error',
+     code: progJ('String s = null;\nSystem.out.println(s.length());'),
+     question: 'This compiles — then explodes the instant it runs, with NullPointerException. What kind of error is it?',
+     choices: ['Logic error — null is a legal value, so the program\'s reasoning is at fault', 'Runtime error — the crash happens when the method is called on nothing', 'Syntax error — null may not be assigned to a String'],
+     answer: 1,
+     why: 'null is a legal String value ("no string at all"), so the compiler is satisfied. The explosion happens during execution, when length() is called on nothing — a runtime error, and the most common one in Java.',
+     note: 'null means the box is empty — asking the box to do something is a runtime crash, every time.'},
+    {id: 'j9q7', type: 'build', diff: 'Stretch', title: 'Array + Method', tags: ['methods', 'arrays'],
+     prompt: 'Write a method sumArray that takes an int array and returns the sum of its elements. main builds {5, 10, 15} and prints:\nTotal: 30',
+     starter: clsJ('// static int sumArray(int[] a) goes here.', 'int[] values = {5, 10, 15};\nSystem.out.println("Total: " + sumArray(values));'),
+     solution: clsJ('    static int sumArray(int[] a) {\n        int sum = 0;\n        for (int v : a) {\n            sum += v;\n        }\n        return sum;\n    }', 'int[] values = {5, 10, 15};\nSystem.out.println("Total: " + sumArray(values));'),
+     checks: [{type: 'output', lines: ['Total: 30']}],
+     hint: 'The parameter type is int[] — the whole array travels into the method, and the traversal inside is the one you already know.',
+     moves: ['Arrays are legal parameters and the method sees the same slots.', 'The pattern does not change when it moves into a method.'],
+     note: 'Methods and arrays compose: hand the method the whole row of slots and let it do its one job.'},
+    {id: 'j9q8', type: 'trace', diff: 'Stretch', title: 'Method + Loop Trace', tags: ['methods', 'loops'],
+     code: clsJ('    static void blast(int n) {\n        for (int i = n; i >= 1; i--) {\n            System.out.println(i);\n        }\n    }', 'blast(3);'),
+     question: 'What prints, in order?',
+     choices: ['3, 2, 1', '1, 2, 3', '3, 2, 1, 0', 'Nothing — blast returns void'],
+     answer: 0,
+     why: 'main calls blast(3), so n is 3. The loop counts i from 3 down to 1, printing each. void means no value comes back — the prints are side effects along the way.',
+     note: 'void methods speak through the console, not through a return — tracing them means watching the side effects.'},
+    {id: 'j9q9', type: 'build', diff: 'Stretch', title: 'Grade Book Mini', tags: ['arrays', 'loops', 'conditionals'],
+     prompt: 'A grade book array: int[] scores = {45, 67, 89, 72, 91}. In one traversal, count the A grades (90 or above) and the passing grades (60 or above). Print:\nA grades: 1\nPassing: 4',
+     starter: progJ('int[] scores = {45, 67, 89, 72, 91};\n// One pass, two counters.'),
+     solution: progJ('int[] scores = {45, 67, 89, 72, 91};\nint aCount = 0;\nint passing = 0;\nfor (int s : scores) {\n    if (s >= 90) {\n        aCount++;\n    }\n    if (s >= 60) {\n        passing++;\n    }\n}\nSystem.out.println("A grades: " + aCount);\nSystem.out.println("Passing: " + passing);'),
+     checks: [{type: 'output', lines: ['A grades: 1', 'Passing: 4']}],
+     hint: 'Two counters, two separate ifs — an A is also passing, so the tests must both get their chance (no else!).',
+     moves: ['One traversal can feed several independent counters.', 'else would break it: an A must increment BOTH counters.'],
+     note: 'When categories overlap, test independently — else is only for categories that exclude each other.'},
+    {id: 'j9q10', type: 'build', diff: 'Boss', title: 'Receipt 2.0', tags: ['input-output', 'types-conversion'], input: ['2', '9.5'],
+     prompt: 'A shop program reads two values from the user: a quantity (whole number, first line) and a unit price (second line) — the input is shown above the editor. Print:\nItems: 2\nTotal: $19.00',
+     starter: scanStarter('// Read qty (int), then price (double); printf the total.'),
+     solution: scanProg('int qty = sc.nextInt();\ndouble price = sc.nextDouble();\ndouble total = qty * price;\nSystem.out.println("Items: " + qty);\nSystem.out.printf("Total: $%.2f", total);'),
+     checks: [{type: 'output', lines: ['Items: 2', 'Total: $19.00']}],
+     hint: 'Order matters: the first read takes the quantity (int), the second takes the price (double). int × double is double math.',
+     moves: ['Reads are positional across lines too — the queue ignores line breaks.', 'Money math in double, money display through %.2f.'],
+     note: 'The full shape at last: read the form, compute, format the answer — that is every coursework program in miniature.'}
+  ]
+}
+
+];
+
+/* Browser: merge into the Chapter 1–2 structures (shared global scope).
+   Node/tests: exported and merged by the suite. */
+if (typeof JAVA_CHAPTERS !== 'undefined'){
+  JAVA_CHAPTERS.push.apply(JAVA_CHAPTERS, JAVA_CHAPTERS_MORE);
+  Object.assign(JAVA_TAG_INFO, JAVA_TAG_INFO_MORE);
+}
+if (typeof module !== 'undefined' && module.exports) module.exports = {JAVA_CHAPTERS_MORE, JAVA_TAG_INFO_MORE};
 
 </script>
 <script>
@@ -3657,7 +4318,7 @@ function viewHome(){
     '<button onclick="H.resetAll()">↺ Reset everything</button>' +
     '<input type="file" id="importFile" accept=".json,application/json" class="hidden" onchange="H.importProgress(this)">' +
     '</div>';
-  h += '<p class="note" style="margin-top:14px">Coming next: Modeling & Pipelines, timed Sprint mode, and Java Level 1 chapters 3–9 (input & interactive programs, conditionals, loops, methods, arrays).</p>';
+  h += '<p class="note" style="margin-top:14px">Coming next: Modeling & Pipelines, timed Sprint mode, and Java Level 2 (objects & collections — the OOP half of CSCI-241).</p>';
   return h;
 }
 function stageChips(coll, L){
@@ -3994,6 +4655,32 @@ function javaComplete(q, helped){
   if (!state.done.javaQ[q.id]){ state.done.javaQ[q.id] = true; state.xp.java += XP_PER; }
   javaTagPass(q); save();
 }
+var JTOPIC = null;
+function javaTagsInUse(){
+  return Object.keys(JAVA_TAG_INFO).filter(function(t){
+    return JAVA_CHAPTERS.some(function(ch){ return ch.questions.some(function(q){ return q.tags.indexOf(t) >= 0; }); });
+  });
+}
+function javaTopicListHtml(tag){
+  var info = JAVA_TAG_INFO[tag];
+  var typeIcon = {build: '\u2328\uFE0F', trace: '\uD83D\uDD2E', classify: '\uD83D\uDD0D'};
+  var h = '<div class="card"><h3 style="margin-top:0">\uD83C\uDFF7\uFE0F Topic: ' + escHtml(info.label) + '</h3>' +
+    '<p class="note">' + escHtml(info.objective) + ' First taught in Chapter ' + (info.chapter + 1) + '. Topic view is open practice \u2014 chapter unlocks still run on the chapter path.</p>';
+  var n = 0;
+  JAVA_CHAPTERS.forEach(function(ch){
+    ch.questions.forEach(function(q, i){
+      if (q.tags.indexOf(tag) < 0) return;
+      n++;
+      var done = !!state.done.javaQ[q.id], cold = coldPending('java', q.id);
+      h += '<button class="qrow" onclick="H.openQuestion(\'' + ch.id + '\',\'' + q.id + '\')">' +
+        '<div class="qn">' + typeIcon[q.type] + '</div><div class="qt"><div>Ch ' + ch.n + ' \u00B7 ' + escHtml(q.title) + '</div>' +
+        '<div class="s">' + escHtml(q.diff) + ' \u00B7 ' + q.tags.map(function(t){ return (JAVA_TAG_INFO[t] || {}).label || t; }).join(' \u00B7 ') + '</div></div>' +
+        '<div class="dots">' + (done ? '\u2705' : (cold ? '\u2744\uFE0F redo cold' : '\u25B6')) + '</div></button>';
+    });
+  });
+  h += '<p class="note">' + n + ' question' + (n === 1 ? '' : 's') + ' on this topic across all chapters.</p></div>';
+  return h;
+}
 function javaSectionHtml(){
   var h = '<div class="unithead">\u2615 Java \u2014 CSCI-241 Track</div><p class="note" style="margin:-4px 2px 10px">Built chapter by chapter from the course learning outcomes: 10 questions per chapter, pass 7 to unlock the next. Stumble repeatedly on one fundamental and the dojo points you back to exactly where it was taught.</p>';
   strugglingTags().forEach(function(tag){
@@ -4003,6 +4690,14 @@ function javaSectionHtml(){
       '<p class="note">This fundamental is tripping you up (' + state.tagStats[tag].streak + ' misses in a row). It is first taught in Chapter ' + (info.chapter + 1) + ' \u2014 a few reps there unstick the current work:</p>' +
       remedialFor(tag).map(function(r){ return '<button class="btn secondary" style="margin:4px 6px 0 0" onclick="H.openQuestion(\'' + r.ch.id + '\',\'' + r.q.id + '\')">Ch ' + r.ch.n + ' \u00B7 ' + escHtml(r.q.title) + '</button>'; }).join('') + '</div>';
   });
+  h += '<div class="stagechips">' +
+    '<button class="chip nav' + (JTOPIC === null ? ' now' : '') + '" onclick="H.jFilter(null)">All topics</button>' +
+    javaTagsInUse().map(function(t){
+      var cnt = 0;
+      JAVA_CHAPTERS.forEach(function(ch){ ch.questions.forEach(function(q){ if (q.tags.indexOf(t) >= 0) cnt++; }); });
+      return '<button class="chip nav' + (JTOPIC === t ? ' now' : '') + '" onclick="H.jFilter(\'' + t + '\')">' + escHtml(JAVA_TAG_INFO[t].label) + ' \u00B7 ' + cnt + '</button>';
+    }).join('') + '</div>';
+  if (JTOPIC){ h += javaTopicListHtml(JTOPIC); return h; }
   h += '<div class="cards">';
   JAVA_CHAPTERS.forEach(function(ch, i){
     var un = javaChapterUnlocked(i), passed = javaPassedInChapter(ch);
@@ -4085,8 +4780,9 @@ function javaBuildHtml(ch, q){
   return h + '</div>';
 }
 function javaChoiceHtml(ch, q){
-  var h = '<div class="card"><p>Read the code and commit to an answer <i>before</i> checking. Guessing first is what makes it stick.</p>' +
-    codeBlock(q.code) + '<p><b>' + escHtml(q.question) + '</b></p>';
+  var h = '<div class="card"><p>Read the code and commit to an answer <i>before</i> checking. Guessing first is what makes it stick.</p>';
+  if (q.input) h += '<div class="area-label">\u2328\uFE0F Input the program receives (one line per entry)</div><div class="outbox">' + escHtml(q.input.join('\n')) + '</div>';
+  h += codeBlock(q.code) + '<p><b>' + escHtml(q.question) + '</b></p>';
   var perm = permFor('java:' + q.id, q.choices.length);
   h += perm.map(function(origIdx, dispIdx){
     var cls = '';
@@ -4210,6 +4906,7 @@ window.H = {
     }
     render(); window.scrollTo(0, 0);
   },
+  jFilter: function(tag){ JTOPIC = tag || null; render(); window.scrollTo(0, 0); },
   openChapter: function(id){
     stopTimer(); S = {screen: 'jchapter', chId: id}; render(); window.scrollTo(0, 0);
   },
