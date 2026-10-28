@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Code Dojo — DE Interview Prep</title>
-<meta name="description" content="A local-only, offline app for Data Engineer interview prep: Python drills, rapid-fire operator quizzes, and fundamentals warm-ups. All data stays on your device.">
+<meta name="description" content="A local-only, offline app for Data Engineer interview prep: Python drills, a SQL arena with a visual query stepper, rapid-fire operator quizzes, and fundamentals warm-ups. All data stays on your device.">
 <style>
 :root{
   --bg:#f4f6fb; --card:#ffffff; --ink:#16202e; --muted:#64748b; --line:#e2e8f0;
@@ -105,6 +105,14 @@ textarea.editor{width:100%; min-height:190px; background:var(--code-bg); color:v
 .bigemoji{font-size:52px; text-align:center; margin:8px 0}
 .center{text-align:center}
 .hidden{display:none}
+.sqlwrap{overflow-x:auto; margin:10px 0}
+.sqltable{border-collapse:collapse; width:100%; font-size:13.5px; font-family:ui-monospace,Menlo,monospace}
+.sqltable th{background:#101828; color:#e6edf3; text-align:left; padding:7px 9px; white-space:nowrap}
+.sqltable td{border-bottom:1px solid var(--line); padding:6px 9px; white-space:nowrap}
+.sqltable tr:last-child td{border-bottom:0}
+.nullv{color:var(--red); font-style:italic}
+.schemaline{font-size:13.5px; color:var(--muted); padding:3px 0; font-family:ui-monospace,Menlo,monospace}
+.editor.sql{min-height:170px}
 
 </style>
 <link rel="manifest" href="manifest.webmanifest">
@@ -870,6 +878,426 @@ const RAPID_DECKS = [
 }
 ];
 if (typeof module !== 'undefined' && module.exports) module.exports = {RAPID_DECKS};
+
+</script>
+<script>
+'use strict';
+/* Code Dojo — SQL Arena.
+   Dataset: the same little world as the Python drills (auth events) plus a
+   small commerce side (orders + order_items) for join/grain work.
+   Lesson shape mirrors the drills (teach/predict/step/parsons/build) with
+   sql: true; step is the visual query stepper (engine trace), and every
+   Build carries a grain shape-check before the editor unlocks. */
+var SQL_DB = {
+  users: [
+    {id: 'u1', name: 'Ana', tier: 'pro'},
+    {id: 'u2', name: 'Ben', tier: 'free'},
+    {id: 'u3', name: 'Cy', tier: 'pro'},
+    {id: 'u4', name: 'Di', tier: 'free'},
+    {id: 'u5', name: 'Ed', tier: 'pro'}
+  ],
+  events: [
+    {id: 1, user_id: 'u1', ok: true, reason: null, day: 'Mon'},
+    {id: 2, user_id: 'u2', ok: false, reason: 'bad_password', day: 'Mon'},
+    {id: 3, user_id: 'u1', ok: true, reason: null, day: 'Tue'},
+    {id: 4, user_id: 'u3', ok: false, reason: 'bad_password', day: 'Tue'},
+    {id: 5, user_id: 'u2', ok: true, reason: null, day: 'Tue'},
+    {id: 6, user_id: 'u4', ok: false, reason: 'locked', day: 'Wed'},
+    {id: 7, user_id: 'u3', ok: true, reason: null, day: 'Wed'},
+    {id: 8, user_id: 'u1', ok: true, reason: null, day: 'Wed'},
+    {id: 9, user_id: 'u2', ok: false, reason: 'locked', day: 'Thu'},
+    {id: 10, user_id: 'u5', ok: false, reason: 'bad_password', day: 'Thu'}
+  ],
+  orders: [
+    {id: 101, user_id: 'u1', total: 50, status: 'paid', day: 'Mon'},
+    {id: 102, user_id: 'u1', total: 20, status: 'paid', day: 'Tue'},
+    {id: 103, user_id: 'u2', total: 99, status: 'refunded', day: 'Tue'},
+    {id: 104, user_id: 'u3', total: 35, status: 'paid', day: 'Wed'},
+    {id: 105, user_id: 'u3', total: 35, status: 'pending', day: 'Wed'},
+    {id: 106, user_id: 'u4', total: 10, status: 'paid', day: 'Thu'},
+    {id: 107, user_id: 'u1', total: 70, status: 'paid', day: 'Thu'}
+  ],
+  order_items: [
+    {order_id: 101, sku: 'A', qty: 1, price: 30},
+    {order_id: 101, sku: 'B', qty: 2, price: 10},
+    {order_id: 102, sku: 'A', qty: 1, price: 20},
+    {order_id: 103, sku: 'C', qty: 3, price: 33},
+    {order_id: 104, sku: 'B', qty: 1, price: 35},
+    {order_id: 105, sku: 'A', qty: 2, price: 10},
+    {order_id: 105, sku: 'D', qty: 1, price: 15},
+    {order_id: 107, sku: 'C', qty: 2, price: 35}
+  ]
+};
+
+var SQL_LESSONS = [
+{
+  id: 'sql-select-where', icon: '🔍', sql: true,
+  title: 'SELECT & WHERE — Rows In, Rows Out',
+  tagline: 'Filters never multiply rows. NULL is not a value.',
+  target: '5 min',
+  teach: {
+    body: 'Every SQL query is a pipeline, and it runs in a fixed logical order — FROM, then WHERE, then GROUP BY, then SELECT, then ORDER BY. The order you WRITE is not the order it RUNS, and half of all SQL confusion is forgetting that.\n\nThis lesson is the first two stations. FROM picks the table. WHERE filters rows one at a time: a row survives only if the condition is TRUE — not false, and not unknown. That third case is where NULL lives: any comparison against NULL comes back unknown, so `reason = NULL` matches nothing, ever. You ask about NULL with IS NULL / IS NOT NULL.',
+    points: [
+      'WHERE never multiplies rows: rows in >= rows out. If a count grew, a JOIN did it.',
+      'A row survives WHERE only when the condition is TRUE — NULL comparisons are unknown, so the row drops.',
+      'reason = NULL matches nothing. The test is reason IS NULL.',
+      'Successful events in this dataset carry reason = NULL by design — the same nulls-by-design from the Python drills.'
+    ],
+    query: 'SELECT id, user_id, reason\nFROM events\nWHERE ok = false\nORDER BY id',
+    note: 'Five rows survive: every failed login. Note the successful logins are invisible here — and that their NULL reasons would fail any `reason = ...` test you wrote.'
+  },
+  predict: {
+    code: 'SELECT COUNT(*) AS n\nFROM events\nWHERE ok = false AND reason = \'locked\'',
+    question: 'How many rows does this return in n?',
+    choices: ['1', '2', '3', '5'],
+    answer: 1,
+    why: 'Failed logins with reason locked: events 6 and 9. n = 2. COUNT(*) counts surviving rows — WHERE did the filtering first.'
+  },
+  step: {
+    query: 'SELECT id, user_id\nFROM events\nWHERE user_id = \'u1\' AND ok = true\nORDER BY id',
+    notes: {
+      from: 'FROM loads all 10 events. Nothing filtered yet — this is the raw table.',
+      where: 'WHERE keeps rows where BOTH conditions are true: u1\u2019s successful events — ids 1, 3, 8. 10 rows in, 3 out.',
+      select: 'SELECT projects just the two columns asked for. Same 3 rows, narrower.',
+      order: 'ORDER BY id sorts the survivors. Sorting is presentation — it never changes WHICH rows you have.'
+    },
+    finalQ: {
+      question: 'After the WHERE stage, how many rows remain?',
+      choices: ['10', '3', '5', '2'],
+      answer: 1,
+      why: 'u1 has three successful events (ids 1, 3, 8). WHERE is where the 10 became 3 — SELECT and ORDER BY never change the count.'
+    }
+  },
+  parsons: {
+    prompt: 'Rebuild the query: every failed login (id, user_id, reason), oldest first.',
+    lines: ['SELECT id, user_id, reason', 'FROM events', 'WHERE ok = false', 'ORDER BY id'],
+    expected: ['5 rows — events 2, 4, 6, 9, 10']
+  },
+  build: {
+    prompt: 'List every failed login: id, user_id and reason, oldest first (by id).',
+    starter: 'SELECT \nFROM events\nWHERE ',
+    hint: 'Failed means ok = false. You do not need to mention reason in the WHERE at all — just select it.',
+    solution: 'SELECT id, user_id, reason\nFROM events\nWHERE ok = false\nORDER BY id',
+    checks: [{type: 'result', ordered: true, expected: [
+      {id: 2, user_id: 'u2', reason: 'bad_password'},
+      {id: 4, user_id: 'u3', reason: 'bad_password'},
+      {id: 6, user_id: 'u4', reason: 'locked'},
+      {id: 9, user_id: 'u2', reason: 'locked'},
+      {id: 10, user_id: 'u5', reason: 'bad_password'}
+    ]}],
+    shapeQ: {
+      question: 'Before you write it: one row in your result represents…',
+      choices: ['One login event', 'One user', 'One failure reason', 'One day'],
+      answer: 0,
+      why: 'No JOIN, no GROUP BY — the grain stays one row per event. Naming the grain first is the whole habit.'
+    }
+  }
+},
+{
+  id: 'sql-join-grain', icon: '🔗', sql: true,
+  title: 'JOINs & Grain — The Fan-Out Trap',
+  tagline: 'A JOIN can multiply rows. Count the wrong grain and every number lies.',
+  target: '6 min',
+  teach: {
+    body: 'A JOIN stitches two tables by matching keys — and it can MULTIPLY rows. orders has 7 rows; order_items has 8. Join them and you get 8 rows: one per ITEM, because order 101 has two items and order 106 has none. The grain of the result quietly changed from "one row per order" to "one row per item" — and every aggregate you compute now answers a different question than you think.\n\nThis is the fan-out trap, the single most common way production SQL lies. COUNT(*) after the join counts items. COUNT(DISTINCT order id) counts orders. Same query, same data, different grain, different truth.',
+    points: [
+      'After orders JOIN order_items, one row = one ITEM, not one order. The grain changed.',
+      'COUNT(*) counts rows at the CURRENT grain. COUNT(DISTINCT o.id) counts distinct orders.',
+      'An order with no items vanishes from an inner JOIN entirely (order 106).',
+      'Aggregates like SUM(qty * price) are correct at item grain — revenue per order works because you GROUP back to order grain.'
+    ],
+    query: 'SELECT COUNT(*) AS joined_rows, COUNT(DISTINCT o.id) AS distinct_orders\nFROM orders o\nJOIN order_items i ON i.order_id = o.id',
+    note: 'joined_rows = 8, distinct_orders = 6. Seven orders went in; the join produced item rows, and one order (106, no items) dropped out completely.'
+  },
+  predict: {
+    code: 'SELECT COUNT(*) AS n\nFROM orders o\nJOIN order_items i ON i.order_id = o.id',
+    question: 'What is n?',
+    choices: ['6', '7', '8', '15'],
+    answer: 2,
+    why: 'The join produces one row per item row: 8. Order 101 contributes 2, order 105 contributes 2, and order 106 (no items) contributes 0.'
+  },
+  step: {
+    query: 'SELECT o.id AS oid, SUM(i.qty * i.price) AS rev\nFROM orders o\nJOIN order_items i ON i.order_id = o.id\nGROUP BY o.id\nORDER BY rev DESC',
+    notes: {
+      from: 'FROM loads the 7 orders.',
+      join: 'JOIN matches items to orders: 8 rows now — one per item. Grain: item. Order 106 is gone; orders 101 and 105 appear twice.',
+      group: 'GROUP BY o.id collapses the 8 item rows back into 6 order buckets. Grain restored: one row per order-that-has-items.',
+      select: 'SELECT computes SUM(qty * price) inside each bucket — the revenue of that order.',
+      order: 'ORDER BY rev DESC puts the biggest order (103, revenue 99) on top.'
+    },
+    finalQ: {
+      question: 'Right after the JOIN stage, how many rows are there — and what is one row?',
+      choices: ['7 rows — one per order', '8 rows — one per item', '6 rows — one per order with items', '15 rows — orders plus items'],
+      answer: 1,
+      why: '8 item rows. The GROUP BY later collapses them to 6 order rows, but at the JOIN stage the grain is items — any COUNT(*) there counts items.'
+    }
+  },
+  parsons: {
+    prompt: 'Rebuild the query: revenue per order (orders with items only).',
+    lines: ['SELECT o.id AS oid, SUM(i.qty * i.price) AS rev', 'FROM orders o', 'JOIN order_items i ON i.order_id = o.id', 'GROUP BY o.id', 'ORDER BY rev DESC'],
+    expected: ['6 rows — order 103 on top with 99']
+  },
+  build: {
+    prompt: 'For each order that has items, show the order id (as oid) and its total revenue (as rev) — revenue is SUM(qty * price) over its items. Biggest revenue first.',
+    starter: 'SELECT \nFROM orders o\nJOIN order_items i ON \nGROUP BY ',
+    hint: 'The join key is i.order_id = o.id. Group by the order id so item rows collapse back to order grain, then order by the revenue alias.',
+    solution: 'SELECT o.id AS oid, SUM(i.qty * i.price) AS rev\nFROM orders o\nJOIN order_items i ON i.order_id = o.id\nGROUP BY o.id\nORDER BY rev DESC',
+    checks: [{type: 'result', ordered: true, expected: [
+      {oid: 103, rev: 99}, {oid: 107, rev: 70}, {oid: 101, rev: 50},
+      {oid: 104, rev: 35}, {oid: 105, rev: 35}, {oid: 102, rev: 20}
+    ]}],
+    shapeQ: {
+      question: 'Before you write it: right after the JOIN (before any GROUP BY), one row represents…',
+      choices: ['One item on an order', 'One order', 'One user', 'One product'],
+      answer: 0,
+      why: 'Item grain. Your GROUP BY is what restores order grain — if you counted before grouping, you would count items.'
+    }
+  }
+},
+{
+  id: 'sql-group-by', icon: '🪣', sql: true,
+  title: 'GROUP BY — Buckets, In SQL',
+  tagline: 'Same bucket pattern as Python. WHERE filters rows; HAVING filters buckets.',
+  target: '6 min',
+  teach: {
+    body: 'GROUP BY is the bucket pattern from the Python drills, wearing SQL clothes. Rows pour into buckets keyed by the grouping column; aggregates (COUNT, SUM, AVG) then read each bucket. One row comes out per bucket — the grain becomes "one row per group".\n\nTwo filters, two different moments: WHERE filters ROWS before bucketing. HAVING filters BUCKETS after the aggregates exist. "Users with at least 3 events" is a HAVING question — you cannot know the count until the bucket is full.',
+    points: [
+      'GROUP BY user_id on events makes 5 buckets — and the per-bucket counts must sum back to 10, the row total. Always sum-check.',
+      'WHERE runs before grouping (rows), HAVING runs after (buckets).',
+      'COUNT(*) counts rows in the bucket; COUNT(reason) counts non-NULL reasons in the bucket — different numbers, both honest.',
+      'After GROUP BY, plain columns in SELECT must be the grouping keys or aggregates — everything else is ambiguous.'
+    ],
+    query: 'SELECT user_id, COUNT(*) AS n\nFROM events\nGROUP BY user_id\nORDER BY n DESC, user_id',
+    note: 'u1 and u2 tie at 3 events each. The tie-break (user_id) makes the output deterministic — without it, tied rows can come back in any order.'
+  },
+  predict: {
+    code: 'SELECT user_id, COUNT(*) AS n\nFROM events\nGROUP BY user_id\nHAVING COUNT(*) >= 3',
+    question: 'How many rows does this return?',
+    choices: ['5', '2', '3', '0'],
+    answer: 1,
+    why: 'Buckets: u1=3, u2=3, u3=2, u4=1, u5=1. HAVING keeps the two buckets with count >= 3.'
+  },
+  step: {
+    query: 'SELECT user_id, COUNT(*) AS n\nFROM events\nGROUP BY user_id\nHAVING COUNT(*) >= 3\nORDER BY user_id',
+    notes: {
+      from: 'FROM loads all 10 events.',
+      group: 'GROUP BY user_id sorts rows into 5 buckets: u1 has 3, u2 has 3, u3 has 2, u4 has 1, u5 has 1. The counts sum to 10 — the whole table is accounted for.',
+      having: 'HAVING filters BUCKETS: only u1 and u2 have COUNT(*) >= 3. Three buckets are discarded whole.',
+      select: 'SELECT reads one row per surviving bucket.',
+      order: 'ORDER BY user_id: u1, then u2.'
+    },
+    finalQ: {
+      question: 'Why can\u2019t the ">= 3 events" filter go in a WHERE clause?',
+      choices: ['WHERE runs before the buckets exist, so there is no count yet', 'WHERE cannot use numbers', 'WHERE only works on strings', 'It can — WHERE and HAVING are identical'],
+      answer: 0,
+      why: 'WHERE filters individual rows before grouping. The count is a property of the finished bucket — that is exactly what HAVING is for.'
+    }
+  },
+  parsons: {
+    prompt: 'Rebuild the query: event counts per user, only users with at least 3 events.',
+    lines: ['SELECT user_id, COUNT(*) AS n', 'FROM events', 'GROUP BY user_id', 'HAVING COUNT(*) >= 3', 'ORDER BY user_id'],
+    expected: ['2 rows — u1 and u2']
+  },
+  build: {
+    prompt: 'Show the users with at least 3 events: user_id and their event count (as n). Most events first; break ties by user_id so the order is stable.',
+    starter: 'SELECT user_id, COUNT(*) AS n\nFROM events\nGROUP BY \nHAVING ',
+    hint: 'Group by user_id, then HAVING COUNT(*) >= 3 keeps the big buckets. Order by n DESC, user_id.',
+    solution: 'SELECT user_id, COUNT(*) AS n\nFROM events\nGROUP BY user_id\nHAVING COUNT(*) >= 3\nORDER BY n DESC, user_id',
+    checks: [{type: 'result', ordered: true, expected: [
+      {user_id: 'u1', n: 3}, {user_id: 'u2', n: 3}
+    ]}],
+    shapeQ: {
+      question: 'Before you write it: after GROUP BY user_id, one row represents…',
+      choices: ['One user — a bucket holding all their events', 'One event', 'One day', 'One login failure'],
+      answer: 0,
+      why: 'Bucket grain. Aggregates read the bucket; HAVING filters buckets. Name the grain before you aggregate.'
+    }
+  }
+},
+{
+  id: 'sql-window-latest', icon: '🪟', sql: true,
+  title: 'Latest Per Group — Window Functions',
+  tagline: 'ROW_NUMBER numbers rows inside each group without collapsing them.',
+  target: '6 min',
+  teach: {
+    body: 'GROUP BY collapses. Window functions do not: they compute a value for each row while looking at a WINDOW of related rows. ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id DESC) numbers each user\u2019s events 1, 2, 3… — restarting per user, latest first. The row with rn = 1 is that user\u2019s latest event.\n\nThe catch: you cannot filter on a window result in the same query\u2019s WHERE (WHERE runs before windows exist). So the pattern is two stories: number the rows in a subquery, then filter rn = 1 outside. This "latest per group" pattern is one of the most-asked SQL questions in data engineering interviews, full stop.',
+    points: [
+      'PARTITION BY restarts the numbering per group; ORDER BY inside OVER decides who is #1.',
+      'Window functions keep every row — unlike GROUP BY, nothing collapses.',
+      'Filter rn = 1 in an OUTER query: the subquery numbers, the outer query picks.',
+      'Latest means "greatest by your ordering" — here highest id. In real tables that is usually a timestamp, and ties need a tie-break.'
+    ],
+    query: 'SELECT user_id, id\nFROM (\n  SELECT user_id, id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id DESC) AS rn\n  FROM events\n) t\nWHERE rn = 1\nORDER BY user_id',
+    note: 'u1\u2019s latest event is 8, u2\u2019s is 9, u3\u2019s is 7, u4\u2019s is 6, u5\u2019s is 10. Same answer the Python "Latest Per Key" drill produced — SQL just says it in one statement.'
+  },
+  predict: {
+    code: 'SELECT id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id DESC) AS rn\nFROM events',
+    question: 'What rn does event id 8 get?',
+    choices: ['3', '8', '1', '2'],
+    answer: 2,
+    why: 'Event 8 is u1\u2019s highest-id event — inside u1\u2019s partition, ordered by id DESC, it is first. rn = 1.'
+  },
+  step: {
+    query: 'SELECT user_id, id\nFROM (\n  SELECT user_id, id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id DESC) AS rn\n  FROM events\n) t\nWHERE rn = 1\nORDER BY user_id',
+    notes: {
+      from: 'The subquery runs FIRST: it numbers all 10 events within their user (u1: 8→1, 3→2, 1→3). FROM receives those 10 numbered rows as table t.',
+      where: 'WHERE rn = 1 keeps exactly one row per user — the latest. 10 rows become 5.',
+      select: 'SELECT keeps user_id and id.',
+      order: 'ORDER BY user_id lines the five winners up.'
+    },
+    finalQ: {
+      question: 'How many rows survive WHERE rn = 1?',
+      choices: ['10', '1', '5', '3'],
+      answer: 2,
+      why: 'One per user, and there are 5 users. If your latest-per-group query returns more rows than there are groups, the pattern leaked.'
+    }
+  },
+  parsons: {
+    prompt: 'Rebuild the INNER query: every event, numbered within its user, latest first.',
+    lines: ['SELECT user_id, id,', 'ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id DESC) AS rn', 'FROM events'],
+    expected: ['10 rows — every event with its rn']
+  },
+  build: {
+    prompt: 'Find the latest event for each user: user_id and the event id, ordered by user_id.',
+    starter: 'SELECT user_id, id\nFROM (\n  SELECT user_id, id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id DESC) AS rn\n  FROM events\n) t\nWHERE ',
+    hint: 'The starter already numbers the rows. Outside, keep only rn = 1 and order by user_id.',
+    solution: 'SELECT user_id, id\nFROM (\n  SELECT user_id, id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id DESC) AS rn\n  FROM events\n) t\nWHERE rn = 1\nORDER BY user_id',
+    checks: [{type: 'result', ordered: true, expected: [
+      {user_id: 'u1', id: 8}, {user_id: 'u2', id: 9}, {user_id: 'u3', id: 7},
+      {user_id: 'u4', id: 6}, {user_id: 'u5', id: 10}
+    ]}],
+    shapeQ: {
+      question: 'Before you write it: ROW_NUMBER() OVER (PARTITION BY user_id …) restarts its numbering…',
+      choices: ['For each user separately', 'Across the whole table — it never restarts', 'For each day', 'Only when the value changes'],
+      answer: 0,
+      why: 'PARTITION BY is the restart. Without it you would number all 10 events 1–10 and rn = 1 would return a single row.'
+    }
+  }
+},
+{
+  id: 'sql-rank-topn', icon: '🏆', sql: true,
+  title: 'Rank & Top-N Per Group',
+  tagline: 'RANK shares ties; ROW_NUMBER never does. Top-N lives in a subquery.',
+  target: '6 min',
+  teach: {
+    body: 'ROW_NUMBER gives every row a unique number — ties get broken arbitrarily. RANK is the honest referee: tied rows share a rank, and the next rank skips ahead (1, 1, 3). DENSE_RANK shares ties without skipping (1, 1, 2).\n\n"Top 2 per group" is the same two-story pattern as latest-per-group: rank inside a subquery, filter outside. The tie behavior decides your row count: ask for top-2 by RANK and a tie at rank 2 hands you 3 rows. Interviews test exactly this — whether you notice the tie before it notices you.',
+    points: [
+      'RANK: ties share, next rank skips (1, 1, 3). DENSE_RANK: ties share, no skip (1, 1, 2). ROW_NUMBER: no sharing, ever.',
+      'u3 has two orders of 35 — RANK gives both rk = 1. A "top 1" filter returns BOTH.',
+      'Top-N per group = window in a subquery + rk <= N outside. Same skeleton as latest-per-group (which is just top-1).',
+      'If a problem says "the top 2" and means exactly 2 rows, that is ROW_NUMBER territory — read the requirement, pick the function.'
+    ],
+    query: 'SELECT user_id, id, total, RANK() OVER (PARTITION BY user_id ORDER BY total DESC) AS rk\nFROM orders\nWHERE user_id = \'u3\'',
+    note: 'Both of u3\u2019s orders get rk = 1 — a dead tie at 35. Any top-N filter on RANK must be tie-aware.'
+  },
+  predict: {
+    code: 'SELECT COUNT(*) AS n\nFROM (\n  SELECT RANK() OVER (PARTITION BY user_id ORDER BY total DESC) AS rk\n  FROM orders\n  WHERE user_id = \'u3\'\n) t\nWHERE rk <= 1',
+    question: 'How many rows come back for u3\u2019s "top 1"?',
+    choices: ['1', '2', '0', '3'],
+    answer: 1,
+    why: 'Both orders total 35, so both hold rank 1. RANK shares ties — "top 1" returns 2 rows. This is the tie trap, live.'
+  },
+  step: {
+    query: 'SELECT user_id, id, total\nFROM (\n  SELECT user_id, id, total, RANK() OVER (PARTITION BY user_id ORDER BY total DESC) AS rk\n  FROM orders\n) t\nWHERE rk <= 2\nORDER BY user_id, total DESC',
+    notes: {
+      from: 'The subquery ranks every order inside its user: u1 gets 70→1, 50→2, 20→3; u3\u2019s two 35s both get 1.',
+      where: 'WHERE rk <= 2 keeps the top two ranks per user. u1 keeps 2 rows, u3 keeps both tied rows, u2 and u4 keep their single orders.',
+      select: 'SELECT drops the rk helper column.',
+      order: 'ORDER BY user_id, total DESC presents each user\u2019s best first.'
+    },
+    finalQ: {
+      question: 'RANK() and ROW_NUMBER() differ exactly when…',
+      choices: ['Two rows tie — RANK shares the rank, ROW_NUMBER still hands out unique numbers', 'The table has more than 10 rows', 'You use DESC instead of ASC', 'Never — they are synonyms'],
+      answer: 0,
+      why: 'Ties. Everything else about the two functions is the same machinery — the tie policy is the whole difference.'
+    }
+  },
+  parsons: {
+    prompt: 'Rebuild the INNER query: every order, ranked inside its user by total, biggest first.',
+    lines: ['SELECT user_id, id, total,', 'RANK() OVER (PARTITION BY user_id ORDER BY total DESC) AS rk', 'FROM orders'],
+    expected: ['7 rows — every order with its rk']
+  },
+  build: {
+    prompt: 'Show the top 2 orders per user by total, including ties: user_id, order id, and total. Order by user_id, then total descending.',
+    starter: 'SELECT user_id, id, total\nFROM (\n  SELECT user_id, id, total, RANK() OVER (PARTITION BY user_id ORDER BY total DESC) AS rk\n  FROM orders\n) t\nWHERE ',
+    hint: 'Keep rk <= 2 outside. Remember u3\u2019s tie: both 35s are rank 1, so u3 legitimately contributes 2 rows.',
+    solution: 'SELECT user_id, id, total\nFROM (\n  SELECT user_id, id, total, RANK() OVER (PARTITION BY user_id ORDER BY total DESC) AS rk\n  FROM orders\n) t\nWHERE rk <= 2\nORDER BY user_id, total DESC',
+    checks: [{type: 'result', ordered: true, expected: [
+      {user_id: 'u1', id: 107, total: 70}, {user_id: 'u1', id: 101, total: 50},
+      {user_id: 'u2', id: 103, total: 99},
+      {user_id: 'u3', id: 104, total: 35}, {user_id: 'u3', id: 105, total: 35},
+      {user_id: 'u4', id: 106, total: 10}
+    ]}],
+    shapeQ: {
+      question: 'Before you write it: the ranking has to be computed…',
+      choices: ['Inside a subquery, then filtered outside — window results can\u2019t be filtered in the same WHERE', 'In the WHERE clause directly', 'In GROUP BY', 'After LIMIT'],
+      answer: 0,
+      why: 'Logical order: WHERE runs before window functions exist. Number first (inside), filter second (outside).'
+    }
+  }
+},
+{
+  id: 'sql-left-join-missing', icon: '🧹', sql: true,
+  title: 'Anti-Joins — Finding Who\u2019s Missing',
+  tagline: 'LEFT JOIN + IS NULL: the rows with no match are the answer.',
+  target: '6 min',
+  teach: {
+    body: 'Sometimes the question is about absence: users who never ordered, orders with no items, customers who never logged in. An inner JOIN cannot answer it — it deletes exactly the rows you are looking for.\n\nThe anti-join pattern: LEFT JOIN keeps every left row; where the right side has no match, its columns come back NULL. Filter WHERE right_key IS NULL and only the orphans remain. Two clauses, one idea: keep everything, then keep only the empties.',
+    points: [
+      'LEFT JOIN never drops a left row. Unmatched right columns arrive as NULL.',
+      'WHERE o.id IS NULL after LEFT JOIN orders = "users with no orders" — the anti-join.',
+      'DISTINCT collapses fully-duplicate rows; it does NOT pick a winner per key. Dedup-per-key is the window pattern from lesson 4.',
+      'The IS NULL goes on a right-table key that can never be NULL in a real match (a primary key) — otherwise matched rows with NULL data sneak in.'
+    ],
+    query: 'SELECT u.name, u.tier\nFROM users u\nLEFT JOIN orders o ON o.user_id = u.id\nWHERE o.id IS NULL',
+    note: 'One row: Ed, pro — a paying-tier user who has never ordered. That is a business question ("who do we nudge?") answered by absence.'
+  },
+  predict: {
+    code: 'SELECT COUNT(*) AS n\nFROM users u\nLEFT JOIN orders o ON o.user_id = u.id\nWHERE o.id IS NULL',
+    question: 'What is n?',
+    choices: ['0', '1', '2', '5'],
+    answer: 1,
+    why: 'u1, u2, u3, u4 all have orders. Only u5 (Ed) has none — n = 1.'
+  },
+  step: {
+    query: 'SELECT u.name\nFROM users u\nLEFT JOIN orders o ON o.user_id = u.id\nWHERE o.id IS NULL',
+    notes: {
+      from: 'FROM loads the 5 users.',
+      join: 'LEFT JOIN attaches orders: u1 appears 3 times (3 orders), u3 twice, u2 and u4 once — and u5 once, with NULL in every orders column. 8 rows.',
+      where: 'WHERE o.id IS NULL keeps only the row whose order side is empty: u5. 8 rows become 1.',
+      select: 'SELECT keeps just the name: Ed.'
+    },
+    finalQ: {
+      question: 'Right after the LEFT JOIN stage, how many rows are there?',
+      choices: ['5', '7', '8', '1'],
+      answer: 2,
+      why: 'Every order matched to its user (7) plus one NULL-padded row for the orderless user = 8. LEFT JOIN preserves the left side — that is the whole point.'
+    }
+  },
+  parsons: {
+    prompt: 'Rebuild the query: users who have never placed an order.',
+    lines: ['SELECT u.name, u.tier', 'FROM users u', 'LEFT JOIN orders o ON o.user_id = u.id', 'WHERE o.id IS NULL'],
+    expected: ['1 row — Ed, pro']
+  },
+  build: {
+    prompt: 'Find the pro-tier users who have never placed an order: name and tier, alphabetical by name.',
+    starter: 'SELECT \nFROM users u\nLEFT JOIN orders o ON \nWHERE ',
+    hint: 'Join on o.user_id = u.id, keep rows where o.id IS NULL, and add the tier filter (tier = \'pro\') — both conditions live in WHERE.',
+    solution: 'SELECT u.name, u.tier\nFROM users u\nLEFT JOIN orders o ON o.user_id = u.id\nWHERE o.id IS NULL AND u.tier = \'pro\'\nORDER BY u.name',
+    checks: [{type: 'result', ordered: true, expected: [
+      {name: 'Ed', tier: 'pro'}
+    ]}],
+    shapeQ: {
+      question: 'Before you write it: in an anti-join, the rows you want are the ones where…',
+      choices: ['The right side has NO match — its key comes back NULL', 'Both sides match perfectly', 'The left side is duplicated', 'The right side has the most rows'],
+      answer: 0,
+      why: 'Absence is the signal. LEFT JOIN surfaces it as NULLs on the right; IS NULL collects exactly those rows.'
+    }
+  }
+}
+];
+
+if (typeof module !== 'undefined' && module.exports) module.exports = {SQL_DB: SQL_DB, SQL_LESSONS: SQL_LESSONS};
 
 </script>
 <script>
@@ -1840,6 +2268,551 @@ if (typeof module !== 'undefined' && module.exports) module.exports = {runProgra
 
 </script>
 <script>
+'use strict';
+/* Code Dojo — mini SQL engine for the SQL Arena.
+   A teaching subset of SQL over in-memory tables, executed in LOGICAL clause
+   order (FROM/JOIN -> WHERE -> GROUP BY -> HAVING -> window -> SELECT ->
+   DISTINCT -> ORDER BY -> LIMIT) with a trace of intermediate result sets —
+   the trace is what powers the visual query stepper.
+   API:
+     runSQL(sql, db)   -> {ok, cols, rows, error}   rows: array of objects
+     traceSQL(sql, db) -> {ok, stages, error}       stages: [{clause, label, cols, rows, total}]
+   db: {tableName: [ {col: value, ...}, ... ]}  values: number|string|boolean|null
+*/
+(function(){
+var KEYWORDS = {SELECT:1, FROM:1, WHERE:1, GROUP:1, BY:1, HAVING:1, ORDER:1, LIMIT:1, OFFSET:1,
+  JOIN:1, INNER:1, LEFT:1, RIGHT:1, OUTER:1, ON:1, AS:1, AND:1, OR:1, NOT:1, IN:1, IS:1, NULL:1,
+  BETWEEN:1, LIKE:1, DISTINCT:1, ASC:1, DESC:1, OVER:1, PARTITION:1, UNION:1, ALL:1, CASE:1};
+
+function tokenize(sql){
+  var toks = [], i = 0, n = sql.length;
+  while (i < n){
+    var c = sql[i];
+    if (/\s/.test(c)){ i++; continue; }
+    if (c === '-' && sql[i + 1] === '-'){ while (i < n && sql[i] !== '\n') i++; continue; }
+    if (c === "'"){ var j = i + 1, s = ''; while (j < n && sql[j] !== "'"){ s += sql[j]; j++; } if (j >= n) throw new Error('Unterminated string literal'); toks.push({t: 'str', v: s}); i = j + 1; continue; }
+    if (/[0-9]/.test(c) || (c === '.' && /[0-9]/.test(sql[i + 1] || ''))){ var m = /^[0-9]*\.?[0-9]+/.exec(sql.slice(i)); toks.push({t: 'num', v: parseFloat(m[0])}); i += m[0].length; continue; }
+    if (/[A-Za-z_]/.test(c)){ var w = /^[A-Za-z_][A-Za-z0-9_]*/.exec(sql.slice(i))[0]; toks.push({t: 'id', v: w}); i += w.length; continue; }
+    var two = sql.substr(i, 2);
+    if (two === '<=' || two === '>=' || two === '!=' || two === '<>'){ toks.push({t: 'op', v: two === '<>' ? '!=' : two}); i += 2; continue; }
+    if ('=<>+-*/%(),.;'.indexOf(c) >= 0){ toks.push({t: 'op', v: c}); i++; continue; }
+    throw new Error('Unexpected character in SQL: ' + c);
+  }
+  return toks;
+}
+
+function Parser(toks){
+  this.toks = toks; this.i = 0;
+}
+Parser.prototype.peek = function(){ return this.toks[this.i]; };
+Parser.prototype.next = function(){ return this.toks[this.i++]; };
+Parser.prototype.eof = function(){ return this.i >= this.toks.length; };
+Parser.prototype.isKw = function(kw){ var t = this.peek(); return t && t.t === 'id' && t.v.toUpperCase() === kw; };
+Parser.prototype.eatKw = function(kw){ if (this.isKw(kw)){ this.i++; return true; } return false; };
+Parser.prototype.expectKw = function(kw){ if (!this.eatKw(kw)) throw new Error('Expected ' + kw + ' in query'); };
+Parser.prototype.isOp = function(op){ var t = this.peek(); return t && t.t === 'op' && t.v === op; };
+Parser.prototype.eatOp = function(op){ if (this.isOp(op)){ this.i++; return true; } return false; };
+Parser.prototype.expectOp = function(op){ if (!this.eatOp(op)) throw new Error('Expected "' + op + '" in query'); };
+
+Parser.prototype.parseQuery = function(){
+  this.expectKw('SELECT');
+  var q = {distinct: this.eatKw('DISTINCT'), items: [], joins: []};
+  if (this.eatOp('*')) q.items.push({star: true});
+  else {
+    for (;;){
+      if (this.isOp('*')){ this.next(); q.items.push({star: true}); }
+      else {
+        var item = {expr: this.parseExpr()};
+        var t = this.peek();
+        if (t && t.t === 'op' && t.v === '.' ){ /* handled inside parseExpr via colref */ }
+        if (this.eatKw('AS')){ var a = this.next(); if (!a || a.t !== 'id') throw new Error('Expected alias after AS'); item.alias = a.v; }
+        else { var t2 = this.peek(); if (t2 && t2.t === 'id' && !KEYWORDS[t2.v.toUpperCase()]){ item.alias = this.next().v; } }
+        q.items.push(item);
+      }
+      if (!this.eatOp(',')) break;
+    }
+  }
+  this.expectKw('FROM');
+  q.from = this.parseSource();
+  for (;;){
+    var jt = null;
+    if (this.eatKw('INNER')){ this.expectKw('JOIN'); jt = 'inner'; }
+    else if (this.eatKw('LEFT')){ this.eatKw('OUTER'); this.expectKw('JOIN'); jt = 'left'; }
+    else if (this.eatKw('JOIN')) jt = 'inner';
+    else break;
+    var src = this.parseSource();
+    this.expectKw('ON');
+    q.joins.push({type: jt, source: src, on: this.parseExpr()});
+  }
+  if (this.eatKw('WHERE')) q.where = this.parseExpr();
+  if (this.eatKw('GROUP')){ this.expectKw('BY'); q.groupBy = this.parseExprList(); }
+  if (this.eatKw('HAVING')) q.having = this.parseExpr();
+  if (this.eatKw('ORDER')){ this.expectKw('BY'); q.orderBy = this.parseOrderTerms(); }
+  if (this.eatKw('LIMIT')){ var lt = this.next(); if (!lt || lt.t !== 'num') throw new Error('LIMIT needs a number'); q.limit = lt.v;
+    if (this.eatKw('OFFSET')){ var ot = this.next(); if (!ot || ot.t !== 'num') throw new Error('OFFSET needs a number'); q.offset = ot.v; } }
+  this.eatOp(';');
+  return q;
+};
+Parser.prototype.parseSource = function(){
+  if (this.eatOp('(')){
+    var sub = this.parseQuery();
+    this.expectOp(')');
+    this.eatKw('AS');
+    var a = this.next(); if (!a || a.t !== 'id') throw new Error('A subquery in FROM needs an alias, e.g. (SELECT ...) t');
+    return {subquery: sub, alias: a.v};
+  }
+  var t = this.next(); if (!t || t.t !== 'id') throw new Error('Expected a table name after FROM/JOIN');
+  var src = {table: t.v};
+  var nt = this.peek();
+  if (nt && nt.t === 'id' && !KEYWORDS[nt.v.toUpperCase()]) src.alias = this.next().v;
+  return src;
+};
+Parser.prototype.parseExprList = function(){
+  var out = [this.parseExpr()];
+  while (this.eatOp(',')) out.push(this.parseExpr());
+  return out;
+};
+Parser.prototype.parseOrderTerms = function(){
+  var out = [];
+  for (;;){
+    var e = this.parseExpr();
+    var dir = 'ASC';
+    if (this.eatKw('DESC')) dir = 'DESC'; else this.eatKw('ASC');
+    out.push({expr: e, dir: dir});
+    if (!this.eatOp(',')) break;
+  }
+  return out;
+};
+Parser.prototype.parseExpr = function(){ return this.parseOr(); };
+Parser.prototype.parseOr = function(){
+  var l = this.parseAnd();
+  while (this.eatKw('OR')) l = {type: 'or', l: l, r: this.parseAnd()};
+  return l;
+};
+Parser.prototype.parseAnd = function(){
+  var l = this.parseNot();
+  while (this.eatKw('AND')) l = {type: 'and', l: l, r: this.parseNot()};
+  return l;
+};
+Parser.prototype.parseNot = function(){
+  if (this.eatKw('NOT')) return {type: 'not', x: this.parseNot()};
+  return this.parseCmp();
+};
+Parser.prototype.parseCmp = function(){
+  var l = this.parseAdd();
+  if (this.eatKw('IS')){
+    var neg = this.eatKw('NOT');
+    this.expectKw('NULL');
+    return {type: 'isnull', x: l, neg: neg};
+  }
+  var neg2 = false;
+  if (this.isKw('NOT')){ var save = this.i; this.next(); if (this.isKw('IN') || this.isKw('BETWEEN') || this.isKw('LIKE')) neg2 = true; else this.i = save; }
+  if (this.eatKw('IN')){
+    this.expectOp('(');
+    var list = [this.parseExpr()];
+    while (this.eatOp(',')) list.push(this.parseExpr());
+    this.expectOp(')');
+    return {type: 'in', x: l, list: list, neg: neg2};
+  }
+  if (this.eatKw('BETWEEN')){
+    var lo = this.parseAdd(); this.expectKw('AND'); var hi = this.parseAdd();
+    return {type: 'between', x: l, lo: lo, hi: hi, neg: neg2};
+  }
+  if (this.eatKw('LIKE')){
+    var p = this.parseAdd();
+    return {type: 'like', x: l, p: p, neg: neg2};
+  }
+  var t = this.peek();
+  if (t && t.t === 'op' && ['=', '!=', '<', '<=', '>', '>='].indexOf(t.v) >= 0){
+    this.next();
+    return {type: 'cmp', op: t.v, l: l, r: this.parseAdd()};
+  }
+  return l;
+};
+Parser.prototype.parseAdd = function(){
+  var l = this.parseMul();
+  for (;;){
+    if (this.eatOp('+')) l = {type: 'arith', op: '+', l: l, r: this.parseMul()};
+    else if (this.eatOp('-')) l = {type: 'arith', op: '-', l: l, r: this.parseMul()};
+    else break;
+  }
+  return l;
+};
+Parser.prototype.parseMul = function(){
+  var l = this.parseUnary();
+  for (;;){
+    if (this.eatOp('*')) l = {type: 'arith', op: '*', l: l, r: this.parseUnary()};
+    else if (this.eatOp('/')) l = {type: 'arith', op: '/', l: l, r: this.parseUnary()};
+    else if (this.eatOp('%')) l = {type: 'arith', op: '%', l: l, r: this.parseUnary()};
+    else break;
+  }
+  return l;
+};
+Parser.prototype.parseUnary = function(){
+  if (this.eatOp('-')) return {type: 'neg', x: this.parseUnary()};
+  return this.parsePrimary();
+};
+Parser.prototype.parsePrimary = function(){
+  var t = this.next();
+  if (!t) throw new Error('Unexpected end of query');
+  if (t.t === 'num') return {type: 'lit', v: t.v};
+  if (t.t === 'str') return {type: 'lit', v: t.v};
+  if (t.t === 'op' && t.v === '('){ var e = this.parseExpr(); this.expectOp(')'); return e; }
+  if (t.t === 'id'){
+    var up = t.v.toUpperCase();
+    if (up === 'NULL') return {type: 'lit', v: null};
+    if (up === 'TRUE') return {type: 'lit', v: true};
+    if (up === 'FALSE') return {type: 'lit', v: false};
+    if (this.isOp('(')){
+      this.next();
+      var fn = {type: 'func', name: up, args: [], distinct: false};
+      if (this.eatOp('*')) fn.args.push({type: 'star'});
+      else if (!this.isOp(')')){
+        if (this.eatKw('DISTINCT')) fn.distinct = true;
+        fn.args.push(this.parseExpr());
+        while (this.eatOp(',')) fn.args.push(this.parseExpr());
+      }
+      this.expectOp(')');
+      if (this.eatKw('OVER')){
+        this.expectOp('(');
+        var ov = {partitionBy: [], orderBy: []};
+        if (this.eatKw('PARTITION')){ this.expectKw('BY'); ov.partitionBy = this.parseExprList(); }
+        if (this.eatKw('ORDER')){ this.expectKw('BY'); ov.orderBy = this.parseOrderTerms(); }
+        this.expectOp(')');
+        fn.over = ov;
+      }
+      return fn;
+    }
+    if (this.isOp('.')){
+      this.next();
+      var c = this.next();
+      if (c && c.t === 'op' && c.v === '*') return {type: 'tstar', table: t.v};
+      if (!c || c.t !== 'id') throw new Error('Expected a column name after ' + t.v + '.');
+      return {type: 'col', table: t.v, name: c.v};
+    }
+    return {type: 'col', name: t.v};
+  }
+  throw new Error('Unexpected token in query: ' + t.v);
+};
+
+/* ---------- evaluation ---------- */
+var AGGS = {COUNT: 1, SUM: 1, AVG: 1, MIN: 1, MAX: 1};
+function exprHasAgg(e){
+  if (!e) return false;
+  if (e.type === 'func') return !!AGGS[e.name] || e.args.some(exprHasAgg);
+  return ['l', 'r', 'x', 'lo', 'hi', 'p'].some(function(k){ return exprHasAgg(e[k]); }) ||
+         (e.list || []).some(exprHasAgg);
+}
+function truthy(v){ return v === true || (typeof v === 'number' && v !== 0); }
+
+function evalExpr(e, ctx, group){
+  switch (e.type){
+    case 'lit': return e.v;
+    case 'col': {
+      var key = e.table ? e.table + '.' + e.name : e.name;
+      if (ctx && Object.prototype.hasOwnProperty.call(ctx, key)) return ctx[key];
+      throw new Error('Unknown column: ' + key);
+    }
+    case 'or': { var a = evalExpr(e.l, ctx, group), b = evalExpr(e.r, ctx, group);
+      if (a === true || b === true) return true; if (a == null || b == null) return null; return false; }
+    case 'and': { var a2 = evalExpr(e.l, ctx, group), b2 = evalExpr(e.r, ctx, group);
+      if (a2 === false || b2 === false) return false; if (a2 == null || b2 == null) return null; return truthy(a2) && truthy(b2); }
+    case 'not': { var v = evalExpr(e.x, ctx, group); return v == null ? null : !truthy(v); }
+    case 'isnull': { var v2 = evalExpr(e.x, ctx, group); return e.neg ? v2 != null && v2 !== undefined : (v2 === null || v2 === undefined); }
+    case 'cmp': {
+      var l = evalExpr(e.l, ctx, group), r = evalExpr(e.r, ctx, group);
+      if (l == null || r == null) return null;
+      switch (e.op){
+        case '=': return l === r; case '!=': return l !== r;
+        case '<': return l < r; case '<=': return l <= r; case '>': return l > r; case '>=': return l >= r;
+      }
+      return null;
+    }
+    case 'in': { var x = evalExpr(e.x, ctx, group); if (x == null) return null;
+      var found = e.list.some(function(it){ return evalExpr(it, ctx, group) === x; });
+      return e.neg ? !found : found; }
+    case 'between': { var x2 = evalExpr(e.x, ctx, group), lo = evalExpr(e.lo, ctx, group), hi = evalExpr(e.hi, ctx, group);
+      if (x2 == null || lo == null || hi == null) return null;
+      var inside = x2 >= lo && x2 <= hi; return e.neg ? !inside : inside; }
+    case 'like': { var s = evalExpr(e.x, ctx, group), p = evalExpr(e.p, ctx, group);
+      if (s == null || p == null) return null;
+      var re = new RegExp('^' + String(p).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*').replace(/_/g, '.') + '$');
+      var m = re.test(String(s)); return e.neg ? !m : m; }
+    case 'arith': { var l2 = evalExpr(e.l, ctx, group), r2 = evalExpr(e.r, ctx, group);
+      if (l2 == null || r2 == null) return null;
+      switch (e.op){ case '+': return l2 + r2; case '-': return l2 - r2; case '*': return l2 * r2;
+        case '/': return r2 === 0 ? null : l2 / r2; case '%': return r2 === 0 ? null : l2 % r2; }
+      return null; }
+    case 'neg': { var v3 = evalExpr(e.x, ctx, group); return v3 == null ? null : -v3; }
+    case 'func': return evalFunc(e, ctx, group);
+  }
+  throw new Error('Cannot evaluate expression');
+}
+function evalFunc(e, ctx, group){
+  if (AGGS[e.name]){
+    var rows = group || (ctx ? [ctx] : []);
+    if (e.name === 'COUNT' && e.args.length && e.args[0].type === 'star') return rows.length;
+    var vals = [];
+    rows.forEach(function(c){
+      var v = evalExpr(e.args[0], c, null);
+      if (v !== null && v !== undefined) vals.push(v);
+    });
+    if (e.distinct){ var seen = {}; vals = vals.filter(function(v){ var k = JSON.stringify(v); if (seen[k]) return false; seen[k] = 1; return true; }); }
+    switch (e.name){
+      case 'COUNT': return vals.length;
+      case 'SUM': return vals.length ? vals.reduce(function(a, b){ return a + b; }, 0) : null;
+      case 'AVG': return vals.length ? vals.reduce(function(a, b){ return a + b; }, 0) / vals.length : null;
+      case 'MIN': return vals.length ? vals.reduce(function(a, b){ return b < a ? b : a; }) : null;
+      case 'MAX': return vals.length ? vals.reduce(function(a, b){ return b > a ? b : a; }) : null;
+    }
+  }
+  var a = e.args.map(function(x){ return evalExpr(x, ctx, group); });
+  switch (e.name){
+    case 'COALESCE': for (var i = 0; i < a.length; i++) if (a[i] !== null && a[i] !== undefined) return a[i]; return null;
+    case 'LOWER': return a[0] == null ? null : String(a[0]).toLowerCase();
+    case 'UPPER': return a[0] == null ? null : String(a[0]).toUpperCase();
+    case 'LENGTH': return a[0] == null ? null : String(a[0]).length;
+    case 'ABS': return a[0] == null ? null : Math.abs(a[0]);
+    case 'ROUND': return a[0] == null ? null : Math.round(a[0] * Math.pow(10, a[1] || 0)) / Math.pow(10, a[1] || 0);
+  }
+  throw new Error('Unsupported function: ' + e.name);
+}
+
+function tableCtxs(db, src){
+  var rows, alias;
+  if (src.subquery){
+    var res = execute(src.subquery, db, null);
+    rows = res.rows; alias = src.alias;
+    return rows.map(function(r){
+      var ctx = {};
+      Object.keys(r).forEach(function(k){ ctx[k] = r[k]; ctx[alias + '.' + k] = r[k]; });
+      return ctx;
+    });
+  }
+  var t = db[src.table];
+  if (!t) throw new Error('Unknown table: ' + src.table);
+  alias = src.alias || src.table;
+  return t.map(function(r){
+    var ctx = {};
+    Object.keys(r).forEach(function(k){ ctx[k] = r[k]; ctx[alias + '.' + k] = r[k]; });
+    return ctx;
+  });
+}
+function tableCols(db, src){
+  if (src.subquery){ var res = execute(src.subquery, db, null); return res.cols; }
+  var t = db[src.table];
+  if (!t) throw new Error('Unknown table: ' + src.table);
+  return t.length ? Object.keys(t[0]) : [];
+}
+function cmpVals(a, b){
+  if (a === b) return 0;
+  if (a === null || a === undefined) return 1; /* nulls last in ASC */
+  if (b === null || b === undefined) return -1;
+  return a < b ? -1 : 1;
+}
+function sortRows(rows, terms, valFn){
+  var decorated = rows.map(function(r, i){ return {r: r, i: i, keys: terms.map(function(t){ return valFn(t, r); })}; });
+  decorated.sort(function(x, y){
+    for (var k = 0; k < terms.length; k++){
+      var c = cmpVals(x.keys[k], y.keys[k]);
+      if (terms[k].dir === 'DESC') c = -c;
+      if (c !== 0) return c;
+    }
+    return x.i - y.i;
+  });
+  return decorated.map(function(d){ return d.r; });
+}
+function dispRows(ctxs, cap){
+  return ctxs.slice(0, cap).map(function(ctx){
+    var o = {};
+    Object.keys(ctx).forEach(function(k){ if (k.indexOf('.') < 0 && k.indexOf('__') !== 0) o[k] = ctx[k]; });
+    return o;
+  });
+}
+function exprLabel(e){
+  if (!e) return '';
+  switch (e.type){
+    case 'col': return e.table ? e.table + '.' + e.name : e.name;
+    case 'lit': return typeof e.v === 'string' ? "'" + e.v + "'" : String(e.v);
+    case 'func': return e.name + '(' + (e.args[0] && e.args[0].type === 'star' ? '*' : e.args.map(exprLabel).join(', ')) + ')';
+    case 'cmp': return exprLabel(e.l) + ' ' + e.op + ' ' + exprLabel(e.r);
+    case 'and': return exprLabel(e.l) + ' AND ' + exprLabel(e.r);
+    case 'or': return exprLabel(e.l) + ' OR ' + exprLabel(e.r);
+    case 'arith': return exprLabel(e.l) + ' ' + e.op + ' ' + exprLabel(e.r);
+    case 'isnull': return exprLabel(e.x) + ' IS ' + (e.neg ? 'NOT ' : '') + 'NULL';
+    case 'not': return 'NOT ' + exprLabel(e.x);
+    case 'in': return exprLabel(e.x) + ' IN (...)';
+    case 'between': return exprLabel(e.x) + ' BETWEEN ' + exprLabel(e.lo) + ' AND ' + exprLabel(e.hi);
+    case 'like': return exprLabel(e.x) + ' LIKE ' + exprLabel(e.p);
+    case 'neg': return '-' + exprLabel(e.x);
+  }
+  return '';
+}
+function itemName(item, srcCols){
+  if (item.alias) return item.alias;
+  var e = item.expr;
+  if (e.type === 'col') return e.name;
+  if (e.type === 'func') return exprLabel(e).toLowerCase().replace(/\s+/g, '');
+  return exprLabel(e);
+}
+
+function execute(q, db, trace){
+  var CAP = 15;
+  function snap(clause, label, ctxs){
+    if (trace) trace.push({clause: clause, label: label, cols: ctxs.length ? Object.keys(dispRows(ctxs, 1)[0] || {}) : [], rows: dispRows(ctxs, CAP), total: ctxs.length});
+  }
+  var ctxs = tableCtxs(db, q.from);
+  var srcName = q.from.subquery ? q.from.alias : (q.from.alias || q.from.table);
+  if (trace) snap('from', 'FROM ' + srcName, ctxs);
+  q.joins.forEach(function(j){
+    var right = tableCtxs(db, j.source);
+    var rcols = tableCols(db, j.source);
+    var ralias = j.source.subquery ? j.source.alias : (j.source.alias || j.source.table);
+    var out = [];
+    ctxs.forEach(function(l){
+      var matched = false;
+      right.forEach(function(r){
+        var merged = {}; Object.keys(l).forEach(function(k){ merged[k] = l[k]; }); Object.keys(r).forEach(function(k){ merged[k] = r[k]; });
+        if (truthy(evalExpr(j.on, merged, null))){ out.push(merged); matched = true; }
+      });
+      if (!matched && j.type === 'left'){
+        var ext = {}; Object.keys(l).forEach(function(k){ ext[k] = l[k]; });
+        rcols.forEach(function(c){ ext[c] = null; ext[ralias + '.' + c] = null; });
+        out.push(ext);
+      }
+    });
+    ctxs = out;
+    if (trace) snap('join', (j.type === 'left' ? 'LEFT JOIN ' : 'JOIN ') + ralias, ctxs);
+  });
+  if (q.where){
+    ctxs = ctxs.filter(function(c){ return truthy(evalExpr(q.where, c, null)); });
+    if (trace) snap('where', 'WHERE ' + exprLabel(q.where), ctxs);
+  }
+  /* grouping */
+  var hasAgg = q.items.some(function(it){ return exprHasAgg(it.expr); }) || exprHasAgg(q.having);
+  var grouped = null; /* [{ctx, group}] */
+  if (q.groupBy){
+    var groups = {}, order = [];
+    ctxs.forEach(function(c){
+      var key = JSON.stringify(q.groupBy.map(function(g){ return evalExpr(g, c, null); }));
+      if (!groups[key]){ groups[key] = {ctx: c, group: []}; order.push(groups[key]); }
+      groups[key].group.push(c);
+    });
+    grouped = order;
+    if (trace){
+      var gdisp = grouped.map(function(g){
+        var o = {};
+        q.groupBy.forEach(function(gx){ var nm = gx.type === 'col' ? gx.name : exprLabel(gx); o[nm] = evalExpr(gx, g.ctx, null); });
+        o['rows_in_group'] = g.group.length;
+        return o;
+      });
+      trace.push({clause: 'group', label: 'GROUP BY ' + q.groupBy.map(exprLabel).join(', '), cols: gdisp.length ? Object.keys(gdisp[0]) : [], rows: gdisp.slice(0, CAP), total: grouped.length});
+    }
+  } else if (hasAgg){
+    grouped = [{ctx: ctxs[0] || {}, group: ctxs}];
+  } else {
+    grouped = ctxs.map(function(c){ return {ctx: c, group: null}; });
+  }
+  if (q.having){
+    grouped = grouped.filter(function(g){ return truthy(evalExpr(q.having, g.ctx, g.group)); });
+    if (trace) snap('having', 'HAVING ' + exprLabel(q.having), grouped.map(function(g){ return g.ctx; }));
+  }
+  /* window functions: assign into ctx under __w<itemIdx> */
+  var winItems = [];
+  q.items.forEach(function(it, idx){ if (it.expr && it.expr.type === 'func' && it.expr.over) winItems.push(idx); });
+  if (winItems.length){
+    winItems.forEach(function(idx){
+      var fn = q.items[idx].expr, ov = fn.over;
+      var parts = {};
+      grouped.forEach(function(g, gi){
+        var key = JSON.stringify(ov.partitionBy.map(function(p){ return evalExpr(p, g.ctx, g.group); }));
+        (parts[key] = parts[key] || []).push(gi);
+      });
+      Object.keys(parts).forEach(function(key){
+        var idxs = parts[key].slice();
+        if (ov.orderBy.length){
+          idxs = sortRows(idxs, ov.orderBy, function(t, gi){ return evalExpr(t.expr, grouped[gi].ctx, grouped[gi].group); });
+        }
+        var lastKeys = null, rank = 0, dense = 0;
+        idxs.forEach(function(gi, pos){
+          var keys = ov.orderBy.map(function(t){ return evalExpr(t.expr, grouped[gi].ctx, grouped[gi].group); });
+          var same = lastKeys !== null && JSON.stringify(keys) === JSON.stringify(lastKeys);
+          if (!same){ rank = pos + 1; dense++; lastKeys = keys; }
+          var val = fn.name === 'ROW_NUMBER' ? pos + 1 : fn.name === 'RANK' ? rank : fn.name === 'DENSE_RANK' ? dense : null;
+          if (val === null) throw new Error('Unsupported window function: ' + fn.name + ' (this dojo supports ROW_NUMBER, RANK, DENSE_RANK)');
+          grouped[gi].ctx['__w' + idx] = val;
+        });
+      });
+    });
+  }
+  /* SELECT projection */
+  var outCols = [], outRows = [];
+  grouped.forEach(function(g){
+    var o = {};
+    q.items.forEach(function(it, idx){
+      if (it.star){
+        Object.keys(g.ctx).forEach(function(k){ if (k.indexOf('.') < 0 && k.indexOf('__') !== 0 && !(k in o)) o[k] = g.ctx[k]; });
+      } else if (it.expr.type === 'tstar'){
+        Object.keys(g.ctx).forEach(function(k){ if (k.indexOf(it.expr.table + '.') === 0){ var nm = k.slice(it.expr.table.length + 1); if (!(nm in o)) o[nm] = g.ctx[k]; } });
+      } else if (it.expr.type === 'func' && it.expr.over){
+        o[itemName(it)] = g.ctx['__w' + idx];
+      } else {
+        o[itemName(it)] = evalExpr(it.expr, g.ctx, g.group);
+      }
+    });
+    outRows.push(o);
+  });
+  outCols = outRows.length ? Object.keys(outRows[0]) : q.items.filter(function(it){ return !it.star; }).map(function(it){ return itemName(it); });
+  if (trace) trace.push({clause: 'select', label: 'SELECT' + (q.distinct ? ' DISTINCT' : ''), cols: outCols, rows: outRows.slice(0, CAP), total: outRows.length});
+  if (q.distinct){
+    var seen = {}; var ded = [];
+    outRows.forEach(function(r){ var k = JSON.stringify(r); if (!seen[k]){ seen[k] = 1; ded.push(r); } });
+    outRows = ded;
+  }
+  if (q.orderBy){
+    var pairs = outRows.map(function(r, i){ return {r: r, g: grouped[i]}; });
+    var sorted = sortRows(pairs, q.orderBy, function(t, p){
+      var nm = t.expr.type === 'col' && !t.expr.table ? t.expr.name : null;
+      if (nm && Object.prototype.hasOwnProperty.call(p.r, nm)) return p.r[nm];
+      return evalExpr(t.expr, p.g.ctx, p.g.group);
+    });
+    outRows = sorted.map(function(p){ return p.r; });
+    if (trace) trace.push({clause: 'order', label: 'ORDER BY ' + q.orderBy.map(function(t){ return exprLabel(t.expr) + (t.dir === 'DESC' ? ' DESC' : ''); }).join(', '), cols: outCols, rows: outRows.slice(0, CAP), total: outRows.length});
+  }
+  if (q.limit !== undefined){
+    outRows = outRows.slice(q.offset || 0, (q.offset || 0) + q.limit);
+    if (trace) trace.push({clause: 'limit', label: 'LIMIT ' + q.limit, cols: outCols, rows: outRows.slice(0, CAP), total: outRows.length});
+  }
+  return {cols: outCols, rows: outRows};
+}
+
+function runSQL(sql, db){
+  try {
+    var p = new Parser(tokenize(sql));
+    var q = p.parseQuery();
+    if (!p.eof()) throw new Error('Unexpected extra text at the end of the query');
+    var res = execute(q, db, null);
+    return {ok: true, cols: res.cols, rows: res.rows, error: null};
+  } catch (e){ return {ok: false, cols: [], rows: [], error: e.message}; }
+}
+function traceSQL(sql, db){
+  try {
+    var p = new Parser(tokenize(sql));
+    var q = p.parseQuery();
+    if (!p.eof()) throw new Error('Unexpected extra text at the end of the query');
+    var trace = [];
+    var res = execute(q, db, trace);
+    return {ok: true, stages: trace, cols: res.cols, rows: res.rows, error: null};
+  } catch (e){ return {ok: false, stages: [], cols: [], rows: [], error: e.message}; }
+}
+
+var API = {runSQL: runSQL, traceSQL: traceSQL};
+if (typeof module !== 'undefined' && module.exports) module.exports = API;
+if (typeof window !== 'undefined') window.SQL_ENGINE = API;
+})();
+
+</script>
+<script>
 (function(){
 'use strict';
 /* Code Dojo v2 — DE Interview Prep (Python only). All state on-device. */
@@ -1855,6 +2828,7 @@ var FUNDAMENTALS = CONCEPTS.map(function(c){
 });
 var COLLECTIONS = {
   drills: {title: '🎯 DE Interview — Python Drills', sub: 'Straightforward problems, interview pace. Finish, print your numbers, verdict from the numbers.', lessons: DE_LESSONS},
+  sql: {title: '🗄️ SQL Arena', sub: 'Queries as pipelines: watch the rows change at every clause. Grain first, always.', lessons: SQL_LESSONS},
   fundamentals: {title: '🐍 Python Fundamentals — Warm-Up', sub: 'The fluency base under the drills.', lessons: FUNDAMENTALS}
 };
 
@@ -1862,7 +2836,7 @@ var storageOK = true;
 function lsGet(){ try { return localStorage.getItem(KEY); } catch (e){ storageOK = false; return null; } }
 function lsSet(v){ try { localStorage.setItem(KEY, v); } catch (e){ storageOK = false; } }
 function defaultState(){
-  return {v: 2, xp: {drills: 0, fundamentals: 0, rapid: 0}, done: {drills: {}, fundamentals: {}}, rapid: {plays: {}, best: {}}, mistakes: [], streak: {last: '', count: 0}, helped: {}};
+  return {v: 2, xp: {drills: 0, sql: 0, fundamentals: 0, rapid: 0}, done: {drills: {}, sql: {}, fundamentals: {}}, rapid: {plays: {}, best: {}}, mistakes: [], streak: {last: '', count: 0}, helped: {}};
 }
 function migrate(s){
   if (!s) return defaultState();
@@ -2009,7 +2983,7 @@ function openLesson(coll, id, stage){
        solutionSeen: false, studyMode: false, parsonsFails: 0, coldCleared: false, orders: {},
        shapeDone: !L.build.shapeQ, shapeMsg: '', shapeGood: false,
        needVerdict: false, verdictDone: !L.build.verdictQ, verdictMsg: '', verdictGood: false,
-       xpAtStart: state.xp.drills + state.xp.fundamentals + state.xp.rapid,
+       xpAtStart: state.xp.drills + state.xp.sql + state.xp.fundamentals + state.xp.rapid,
        startedAt: Date.now()};
   render(); window.scrollTo(0, 0);
 }
@@ -2070,7 +3044,7 @@ function render(){
 }
 function headerHtml(){
   return '<div class="topbar"><div class="logo">🥋 Code<span>Dojo</span></div>' +
-    '<div class="stats"><div class="stat">⭐ ' + (state.xp.drills + state.xp.fundamentals + state.xp.rapid) + ' XP</div>' +
+    '<div class="stats"><div class="stat">⭐ ' + (state.xp.drills + state.xp.sql + state.xp.fundamentals + state.xp.rapid) + ' XP</div>' +
     '<div class="stat">🔥 ' + state.streak.count + '</div></div></div>';
 }
 function sectionHtml(coll){
@@ -2107,6 +3081,7 @@ function viewHome(){
   var h = headerHtml();
   if (!storageOK) h += '<div class="warn">⚠️ This browser is blocking local saving in this context, so progress may not survive closing the tab. Use <b>Export progress</b> below after each session to keep a backup file you can re-import.</div>';
   h += sectionHtml('drills');
+  h += sectionHtml('sql');
   h += rapidSectionHtml();
   h += sectionHtml('fundamentals');
   h += '<div class="card"><h3 style="margin-top:0">How a drill works</h3>' +
@@ -2119,7 +3094,7 @@ function viewHome(){
     '<button onclick="H.resetAll()">↺ Reset everything</button>' +
     '<input type="file" id="importFile" accept=".json,application/json" class="hidden" onchange="H.importProgress(this)">' +
     '</div>';
-  h += '<p class="note" style="margin-top:14px">Coming next: the SQL Arena (visual query stepper, window functions, grain traps), then Modeling & Pipelines and timed Sprint mode.</p>';
+  h += '<p class="note" style="margin-top:14px">Coming next: Modeling & Pipelines and timed Sprint mode. The Java arm is fully designed (90-question levels) and parked in the goal docs for after the interview.</p>';
   return h;
 }
 function stageChips(coll, L){
@@ -2155,7 +3130,132 @@ function viewLesson(){
 function nextStageBtn(label, stage){
   return '<button class="btn" onclick="H.toStage(\'' + stage + '\')">' + label + '</button>';
 }
+/* ---------- SQL Arena views ---------- */
+function sqlCell(v){
+  if (v === null || v === undefined) return '<span class="nullv">NULL</span>';
+  if (typeof v === 'boolean') return v ? 'true' : 'false';
+  return escHtml(String(v));
+}
+function sqlTableHtml(cols, rows, cap){
+  cap = cap || 12;
+  if (!cols.length) return '<div class="note">— no columns —</div>';
+  var h = '<div class="sqlwrap"><table class="sqltable"><thead><tr>' + cols.map(function(c){ return '<th>' + escHtml(c) + '</th>'; }).join('') + '</tr></thead><tbody>';
+  rows.slice(0, cap).forEach(function(r){
+    h += '<tr>' + cols.map(function(c){ return '<td>' + sqlCell(r[c]) + '</td>'; }).join('') + '</tr>';
+  });
+  h += '</tbody></table></div>';
+  if (rows.length > cap) h += '<div class="note">… ' + (rows.length - cap) + ' more rows (' + rows.length + ' total)</div>';
+  return h;
+}
+function sqlSchemaHtml(){
+  return Object.keys(SQL_DB).map(function(t){
+    return '<div class="schemaline"><b>' + escHtml(t) + '</b> (' + Object.keys(SQL_DB[t][0]).join(', ') + ') — ' + SQL_DB[t].length + ' rows</div>';
+  }).join('');
+}
+function rowLine(row, cols){ return cols.map(function(c){ return c + '=' + (row[c] === null || row[c] === undefined ? 'NULL' : row[c]); }).join(' · '); }
+function sqlDivergence(res, chk){
+  if (!res.ok) return {kind: 'error', text: 'Your query stopped on an error (shown above).', question: 'Read the error as a sentence: it names what the engine could not find or could not parse. Which name or keyword is off?'};
+  var exp = chk.expected, act = res.rows;
+  var ecols = exp.length ? Object.keys(exp[0]) : chk.cols || [];
+  var gl = exp.map(function(r){ return rowLine(r, ecols); });
+  if (JSON.stringify(res.cols) !== JSON.stringify(ecols)) return {kind: 'cols', goalLines: gl,
+    text: 'Your columns are (' + res.cols.join(', ') + '); the goal asks for (' + ecols.join(', ') + ').',
+    question: 'Re-read the goal\u2019s column list: which column is missing, extra, or named differently in your SELECT?'};
+  var es = exp.map(function(r){ return JSON.stringify(r); }).sort(), as = act.map(function(r){ return JSON.stringify(r); }).sort();
+  if (act.length < exp.length){
+    var missing = exp.filter(function(r){ return as.indexOf(JSON.stringify(r)) < 0; })[0];
+    return {kind: 'missing', goalLines: gl,
+      text: 'Your result has ' + act.length + ' rows; the goal has ' + exp.length + '. One row the goal keeps and yours drops: ' + (missing ? rowLine(missing, ecols) : '') + '.',
+      question: 'Which part of your query throws rows away — the WHERE, or the JOIN? Walk the pipeline stage by stage: where does that row die?'};
+  }
+  if (act.length > exp.length){
+    var extra = act.filter(function(r){ return es.indexOf(JSON.stringify(r)) < 0; })[0];
+    return {kind: 'extra', goalLines: gl,
+      text: 'Your result has ' + act.length + ' rows; the goal has ' + exp.length + '. One row yours includes and the goal excludes: ' + (extra ? rowLine(extra, ecols) : '') + '.',
+      question: 'Extra rows usually mean a missing filter — or a grain problem: is your result one-row-per-something-finer than the goal\u2019s?'};
+  }
+  for (var i = 0; i < es.length; i++){
+    if (es[i] !== as[i]){
+      var er = exp.filter(function(r){ return JSON.stringify(r) === es[i]; })[0];
+      var ar = act.filter(function(r){ return JSON.stringify(r) === as[i]; })[0];
+      return {kind: 'rowdiff', goalLines: gl,
+        text: 'Same row count, different rows: you have ' + (ar ? rowLine(ar, ecols) : '?') + ' where the goal has ' + (er ? rowLine(er, ecols) : '?') + '.',
+        question: 'Same shape, wrong members — what decides membership in your query: the WHERE conditions, the grouping, or the ranking?'};
+    }
+  }
+  /* same multiset but wrong order (ordered checks) */
+  return {kind: 'order', goalLines: gl,
+    text: 'The right rows, in the wrong order.',
+    question: 'Membership is right; presentation is wrong. What does your ORDER BY sort by — and does it need a tie-break to be deterministic?'};
+}
+function viewTeachSQL(L){
+  var h = '<div class="card">';
+  L.teach.body.split('\n\n').forEach(function(p){ h += '<p>' + escHtml(p) + '</p>'; });
+  h += '<h3>Key ideas</h3><ul>' + L.teach.points.map(function(p){ return '<li>' + escHtml(p) + '</li>'; }).join('') + '</ul>';
+  h += '<h3>The tables</h3>' + sqlSchemaHtml();
+  h += '<div class="code-label">Example query</div>' + codeBlock(L.teach.query);
+  var res = SQL_ENGINE.runSQL(L.teach.query, SQL_DB);
+  if (res.ok) h += '<div class="area-label">Its result</div>' + sqlTableHtml(res.cols, res.rows, 12);
+  h += '<div class="note">' + escHtml(L.teach.note) + '</div>';
+  h += nextStageBtn('Start: Predict →', 'predict');
+  return h + '</div>';
+}
+function viewStepSQL(L){
+  var tr = SQL_ENGINE.traceSQL(L.step.query, SQL_DB);
+  var h = '<div class="card"><h3 style="margin-top:0">👣 Step through the pipeline</h3>' +
+    '<p>Queries run in logical order — watch the rows change at each clause. This is the whole game: know what the table looks like BETWEEN clauses.</p>' + codeBlock(L.step.query);
+  if (!tr.ok){ h += '<div class="feedback bad">⚠️ ' + escHtml(tr.error) + '</div></div>'; return h; }
+  var idx = Math.min(S.stepIdx, tr.stages.length - 1);
+  var st = tr.stages[idx];
+  h += '<div class="stagechips">' + tr.stages.map(function(s, i){
+    return '<div class="chip ' + (i === idx ? 'now' : (i < idx ? 'done' : '')) + '">' + escHtml(s.label.split(' ')[0]) + '</div>';
+  }).join('') + '</div>';
+  h += '<div class="area-label">' + escHtml(st.label) + ' — ' + st.total + ' row' + (st.total === 1 ? '' : 's') + '</div>';
+  h += sqlTableHtml(st.cols, st.rows, 12);
+  var note = L.step.notes[st.clause];
+  h += '<div class="stepnote">' + escHtml(note || ('Stage ' + (idx + 1) + ' of ' + tr.stages.length + ': ' + st.label)) + '</div>';
+  h += '<div class="btnrow">' +
+    '<button class="btn secondary" ' + (idx === 0 ? 'disabled' : '') + ' onclick="H.stepMove(-1)">← Back</button>' +
+    '<button class="btn" ' + (idx >= tr.stages.length - 1 ? 'disabled' : '') + ' onclick="H.stepMove(1)">Step →</button></div>';
+  if (idx >= tr.stages.length - 1){
+    var q = L.step.finalQ;
+    h += '<h3>Check yourself</h3><p><b>' + escHtml(q.question) + '</b></p>' + choiceBtns(q, S.coll + ':' + L.id + ':step');
+    if (!S.checked) h += '<button class="btn" ' + (S.selected < 0 ? 'disabled' : '') + ' onclick="H.checkChoice(\'step\')">Check answer</button>';
+    else {
+      h += feedbackHtml(S.wasCorrect, q.why);
+      if (S.wasCorrect) h += nextStageBtn('Next: Rebuild it →', 'parsons');
+      else h += '<button class="btn secondary" onclick="H.retryChoice()">Try again</button>';
+    }
+  }
+  return h + '</div>';
+}
+function viewBuildSQL(L){
+  var b = L.build;
+  var h = '<div class="card"><h3 style="margin-top:0">⌨️ Build it</h3>';
+  if (b.shapeQ && S.shapeMsg) h += '<div class="feedback good" style="margin:0 0 12px">🔎 ' + escHtml(S.shapeMsg) + '</div>';
+  if (S.solutionSeen) h += '<div class="feedback" style="margin:0 0 12px;border-color:var(--amber)">📖 You studied the solution — this pass is the rebuild. It counts when it\u2019s written by you, and this lesson comes back cold tomorrow.</div>';
+  h += '<p>' + escHtml(b.prompt) + '</p>' + sqlSchemaHtml() +
+    '<textarea class="editor sql" id="editor" spellcheck="false" autocapitalize="off" autocomplete="off">' + escHtml(S.buildCode === null ? b.starter : S.buildCode) + '</textarea>';
+  h += '<div class="btnrow"><button class="btn" onclick="H.runBuild()">▶ Run & check</button>' +
+    '<button class="btn secondary" onclick="H.toggleHint()">' + (S.showHint ? 'Hide hint' : '💡 Hint') + '</button></div>';
+  if (S.showHint) h += '<div class="stepnote" style="margin-top:12px">' + escHtml(b.hint) + '</div>';
+  if (S.buildResult){
+    var r = S.buildResult;
+    if (r.error) h += '<div class="feedback bad">⚠️ ' + escHtml(r.error) + '</div>';
+    else if (r.tableCols) { h += '<div class="area-label">Your result — ' + r.tableRows.length + ' row' + (r.tableRows.length === 1 ? '' : 's') + '</div>' + sqlTableHtml(r.tableCols, r.tableRows, 12); }
+    if (r.checks) h += r.checks.map(function(ch){
+      return '<div class="checkline">' + (ch.pass ? '✅' : '❌') + ' ' + escHtml(ch.label) + '</div>';
+    }).join('');
+    if (!r.allPass && r.diverge) h += divergeHtml(r);
+    if (!r.allPass && S.buildFails >= 2) h += movesHtml(L);
+    if (!r.allPass && S.buildFails >= 3 && !S.solutionSeen) h += '<button class="btn secondary" style="margin-top:10px" onclick="H.studySolution()">📖 Study the solution</button>';
+    if (r.allPass) h += '<div class="feedback good">' + (S.solutionSeen ? '✅ Passed — written by you after studying the solution. This lesson comes back cold tomorrow: that unaided rep is the one that banks it.' : '✅ Result matches. That one is yours — you wrote it.') + (S.coldCleared ? '<br>❄️ Cold recheck cleared — you just did that one unaided.' : '') + '</div>' + nextStageBtn('Finish lesson 🎉', 'done');
+  }
+  return h + '</div>';
+}
+
 function viewTeach(L){
+  if (L.sql) return viewTeachSQL(L);
   var h = '<div class="card">';
   L.teach.body.split('\n\n').forEach(function(p){ h += '<p>' + escHtml(p) + '</p>'; });
   h += '<h3>Key ideas</h3><ul>' + L.teach.points.map(function(p){ return '<li>' + escHtml(p) + '</li>'; }).join('') + '</ul>';
@@ -2191,6 +3291,7 @@ function viewPredict(L){
   return h + '</div>';
 }
 function viewStep(L){
+  if (L.sql) return viewStepSQL(L);
   var st = L.step; var step = st.steps[Math.min(S.stepIdx, st.steps.length - 1)];
   var h = '<div class="card"><h3 style="margin-top:0">👣 Step through it</h3>' +
     '<p>Execute the code in your head, one line at a time. Watch the boxes.</p>' + codeBlock(st.code, step.line);
@@ -2245,6 +3346,7 @@ function gateHtml(kind, q, msg, good){
 function viewBuild(L){
   var b = L.build;
   if (b.shapeQ && !S.shapeDone) return gateHtml('shape', b.shapeQ, S.shapeMsg, S.shapeGood);
+  if (L.sql && !S.studyMode) return viewBuildSQL(L);
   if (S.studyMode){
     return '<div class="card" style="border-color:var(--amber)"><h3 style="margin-top:0">📖 Study the solution</h3>' +
       '<p>Don\u2019t copy it. For each block, say <b>why</b> it is there and what would break without it. When the idea is yours, hide this and rebuild from the starter — from the idea, not from memory of the text.</p>' +
@@ -2281,7 +3383,7 @@ function viewBuild(L){
 }
 function viewDone(L){
   var ls = lessonsOf(S.coll); var idx = ls.indexOf(L);
-  var earnedNow = (state.xp.drills + state.xp.fundamentals + state.xp.rapid) - (S.xpAtStart || 0);
+  var earnedNow = (state.xp.drills + state.xp.sql + state.xp.fundamentals + state.xp.rapid) - (S.xpAtStart || 0);
   var h = '<div class="card center"><div class="bigemoji">🎉</div><h2>Lesson complete!</h2>' +
     '<p>' + (earnedNow > 0 ? 'You earned ' + earnedNow + ' XP' : 'Already banked — no new XP for a redo') + ' in <b>' + escHtml(COLLECTIONS[S.coll].title) + '</b> for <b>' + escHtml(L.title) + '</b> — in ' + elapsedStr() + (L.target ? ' (target ' + L.target + ')' : '') + '.</p>' +
     (state.helped[S.coll + ':' + L.id] ? '<p class="note">📖 This Build was finished after a solution study, so it is queued as a ❄️ cold recheck for tomorrow. Passing it cold — no peeking — is what banks it.</p>' : '');
@@ -2461,6 +3563,25 @@ window.H = {
     var ta = document.getElementById('editor'); if (!ta) return;
     S.buildCode = ta.value;
     var L = lessonById(S.coll, S.conceptId); var b = L.build;
+    if (L.sql){
+      var sr = SQL_ENGINE.runSQL(S.buildCode, SQL_DB);
+      var schecks = [], sallPass = true;
+      b.checks.forEach(function(chk){
+        var pass = false;
+        if (sr.ok){
+          pass = chk.ordered ? JSON.stringify(sr.rows) === JSON.stringify(chk.expected)
+            : JSON.stringify(sr.rows.map(function(r){ return JSON.stringify(r); }).sort()) === JSON.stringify(chk.expected.map(function(r){ return JSON.stringify(r); }).sort());
+        }
+        schecks.push({pass: pass, label: pass ? 'Result table matches the goal' : 'Result table does not match the goal yet'});
+        if (!pass) sallPass = false;
+      });
+      S.buildResult = {output: sr.ok ? sr.rows.map(function(r){ return rowLine(r, sr.cols); }) : [], error: sr.ok ? null : sr.error,
+        checks: schecks, allPass: sallPass, diverge: sallPass ? null : sqlDivergence(sr, b.checks[0]),
+        tableCols: sr.ok ? sr.cols : null, tableRows: sr.ok ? sr.rows : []};
+      if (sallPass){ onBuildPassed(); completeExercise(S.coll, L.id, 'build', S.solutionSeen); }
+      else { S.buildFails++; recordMistake(S.coll, L.id, 'build'); }
+      render(); return;
+    }
     var r = runProgram('python', S.buildCode);
     var checks = [];
     if (!r.ok){
