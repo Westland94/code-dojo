@@ -1,0 +1,2223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Code Dojo — Learn Python + Java</title>
+<meta name="description" content="A local-only, offline app for learning Python and Java fundamentals, on the way to DSA. All data stays on your device.">
+<style>
+:root{
+  --bg:#f4f6fb; --card:#ffffff; --ink:#16202e; --muted:#64748b; --line:#e2e8f0;
+  --green:#22b573; --green-dark:#189a5f; --red:#ef4444; --amber:#f59e0b;
+  --code-bg:#101828; --code-ink:#e6edf3; --accent-py:#2563eb; --accent-java:#ea580c;
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+html,body{margin:0; padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--ink)}
+#app{max-width:560px; margin:0 auto; padding:16px 14px 48px}
+a{color:var(--accent-py)}
+button{font-family:inherit; cursor:pointer}
+.topbar{display:flex; align-items:center; justify-content:space-between; margin:4px 0 14px}
+.logo{font-size:24px; font-weight:800; letter-spacing:-.5px}
+.logo span{color:var(--green)}
+.stats{display:flex; gap:8px}
+.stat{background:var(--card); border:1px solid var(--line); border-radius:999px; padding:6px 12px; font-weight:700; font-size:14px}
+.tracktoggle{display:flex; background:#e8edf5; border-radius:14px; padding:4px; margin-bottom:16px}
+.tracktoggle button{flex:1; border:0; background:transparent; padding:11px; border-radius:10px; font-size:16px; font-weight:700; color:var(--muted)}
+.tracktoggle button.active-py{background:var(--accent-py); color:#fff}
+.tracktoggle button.active-java{background:var(--accent-java); color:#fff}
+.unithead{font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:1.2px; color:var(--muted); margin:10px 2px}
+.pathcard{display:flex; gap:14px; align-items:center; width:100%; text-align:left; background:var(--card); border:2px solid var(--line); border-radius:18px; padding:16px; margin-bottom:12px; font-size:16px; color:var(--ink)}
+.pathcard:not(:disabled){border-bottom-width:4px}
+.pathcard:disabled{opacity:.45}
+.pathcard .icon{font-size:30px}
+.pathcard .t{font-weight:800; font-size:17px}
+.pathcard .s{color:var(--muted); font-size:13px; margin-top:2px}
+.pathcard .dots{margin-left:auto; font-size:13px; white-space:nowrap}
+.pathcard.done{border-color:var(--green)}
+.card{background:var(--card); border:2px solid var(--line); border-radius:18px; padding:18px; margin-bottom:14px}
+.card h2{margin:0 0 8px; font-size:21px}
+.card h3{margin:14px 0 6px; font-size:16px}
+.card p{line-height:1.55; margin:0 0 10px; font-size:15.5px}
+.card ul{margin:6px 0 10px; padding-left:20px; line-height:1.55; font-size:15.5px}
+pre.code{background:var(--code-bg); color:var(--code-ink); border-radius:12px; padding:14px; overflow-x:auto; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:14px; line-height:1.5; margin:10px 0; white-space:pre}
+pre.code .hl{background:rgba(250,204,21,.28); display:block; margin:0 -14px; padding:0 14px}
+.code-label{font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:var(--muted)}
+.note{font-size:14px; color:var(--muted); line-height:1.5}
+.comparebox{border:2px dashed #cbd5e1; border-radius:14px; padding:12px 14px; margin-top:12px; background:#fbfcfe}
+.btn{display:block; width:100%; border:0; border-radius:14px; padding:15px; font-size:16.5px; font-weight:800; background:var(--green); color:#fff; border-bottom:4px solid var(--green-dark); margin-top:12px}
+.btn:active{transform:translateY(2px); border-bottom-width:2px}
+.btn.secondary{background:#fff; color:var(--ink); border:2px solid var(--line); border-bottom-width:4px}
+.btn.small{width:auto; display:inline-block; padding:10px 16px; font-size:14.5px; margin-top:0}
+.btn:disabled{background:#cbd5e1; border-bottom-color:#94a3b8}
+.choice{display:block; width:100%; text-align:left; background:#fff; border:2px solid var(--line); border-bottom-width:4px; border-radius:14px; padding:13px 15px; font-size:15.5px; margin-bottom:10px; white-space:pre-line; font-family:inherit; color:var(--ink)}
+.choice.selected{border-color:var(--accent-py); background:#eff6ff}
+.choice.correct{border-color:var(--green); background:#ecfdf5}
+.choice.wrong{border-color:var(--red); background:#fef2f2}
+.feedback{border-radius:12px; padding:12px 14px; font-size:15px; line-height:1.5; margin-top:12px}
+.feedback.good{background:#ecfdf5; border:1.5px solid var(--green)}
+.feedback.bad{background:#fef2f2; border:1.5px solid var(--red)}
+.progressbar{height:12px; background:#e8edf5; border-radius:999px; overflow:hidden; margin:10px 0 16px}
+.progressbar > div{height:100%; background:var(--green); border-radius:999px; transition:width .3s}
+.stagechips{display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap}
+.chip{font-size:12px; font-weight:800; padding:5px 10px; border-radius:999px; background:#e8edf5; color:var(--muted); text-transform:uppercase; letter-spacing:.5px}
+.chip.now{background:var(--ink); color:#fff}
+.chip.done{background:var(--green); color:#fff}
+.vars{display:flex; flex-wrap:wrap; gap:8px; margin:10px 0}
+.varbox{background:#fff7ed; border:1.5px solid #fdba74; border-radius:10px; padding:7px 11px; font-family:ui-monospace,Menlo,monospace; font-size:14px; font-weight:700}
+.varbox b{color:#9a3412}
+.outbox{background:#0b1220; color:#a7f3d0; border-radius:12px; padding:12px 14px; font-family:ui-monospace,Menlo,monospace; font-size:14px; min-height:44px; white-space:pre-wrap; margin:10px 0}
+.stepnote{font-size:15px; line-height:1.5; background:#fffbeb; border:1.5px solid #fcd34d; border-radius:12px; padding:11px 13px}
+.btnrow{display:flex; gap:10px; margin-top:12px}
+.btnrow .btn{margin-top:0}
+.parline{display:block; width:100%; text-align:left; background:#fff; border:2px solid var(--line); border-bottom-width:4px; border-radius:12px; padding:11px 13px; font-family:ui-monospace,Menlo,monospace; font-size:14px; margin-bottom:8px; white-space:pre; overflow-x:auto; color:var(--ink)}
+.parline.placed{background:#eff6ff; border-color:var(--accent-py)}
+.area-label{font-size:12.5px; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:var(--muted); margin:14px 0 8px}
+textarea.editor{width:100%; min-height:190px; background:var(--code-bg); color:var(--code-ink); border:0; border-radius:12px; padding:14px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:14px; line-height:1.55; resize:vertical}
+.checkline{font-size:14.5px; padding:7px 0; border-bottom:1px solid var(--line)}
+.checkline:last-child{border-bottom:0}
+.foottools{display:flex; gap:8px; flex-wrap:wrap; margin-top:20px}
+.foottools button{background:#fff; border:2px solid var(--line); border-radius:10px; padding:9px 13px; font-weight:700; font-size:13.5px; color:var(--ink)}
+.warn{background:#fef2f2; border:1.5px solid var(--red); border-radius:12px; padding:11px 13px; font-size:14px; line-height:1.5; margin-bottom:14px}
+.backbtn{background:none; border:0; font-size:15.5px; font-weight:800; color:var(--muted); padding:6px 0}
+.bigemoji{font-size:52px; text-align:center; margin:8px 0}
+.center{text-align:center}
+.hidden{display:none}
+
+</style>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#101828">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Code Dojo">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="font-family:sans-serif; padding:20px">Code Dojo needs JavaScript enabled — it is a fully interactive app that runs entirely on your device.</p></noscript>
+<script>
+'use strict';
+/* Code Dojo — Unit 1 content. One concept spine, paired Python/Java realizations.
+   Exercise shapes:
+   predict {code, question, choices[], answer, why}
+   step    {code, steps[{line, vars{}, out, note}], finalQ{question, choices, answer, why}}
+   parsons {prompt, lines[correct order], expected[output lines]}
+   build   {prompt, starter, hint, solution, checks[{type:'output',expected[]} | {type:'var',name,expected}]} */
+const CONCEPTS = [
+{
+  id: 'variables', num: 1, icon: '📦', title: 'Variables & Types',
+  tagline: 'Named boxes that hold values',
+  teach: {
+    body: 'A variable is a named box. You put a value in it, and later you can look inside, use the value in a calculation, or replace it with a new value.\n\nThe most important mental shift: in code, `x = x + 1` is not an equation. It means "take what is in x now, add 1, and put the result back in x." The right side always happens first.\n\nEvery value also has a type — whole numbers, decimal numbers, text (strings), and true/false (booleans) behave differently. Adding two numbers does math; adding two strings glues them together.',
+    points: ['Assignment `=` puts a value in a box — it is not math equality', 'The right side is computed first, then stored', 'Re-assigning replaces the old value completely', 'Main types: integer, decimal, string (text), boolean (true/false)'],
+    compare: 'Python figures out the type from the value and lets you change it later. Java makes you declare the type up front (`int age = 30;`) and then enforces it — a box labeled int can never hold text. Same boxes, stricter labels.'
+  },
+  py: {
+    label: 'Python',
+    teachCode: 'name = "Andrew"\nage = 30\nheight = 5.9\nis_coding = True\n\nage = age + 1\nprint(name)\nprint(age)',
+    teachNote: 'No type declarations — Python infers them. Output: Andrew, then 31.',
+    predict: {
+      code: 'x = 10\ny = x + 5\nx = 20\nprint(y)',
+      question: 'What gets printed?',
+      choices: ['15', '20', '25', '10'],
+      answer: 0,
+      why: 'y was computed when x was still 10, so y holds 15. Changing x afterwards does not reach back and change y — y stored a value, not a formula.'
+    },
+    step: {
+      code: 'score = 40\nbonus = 8\nscore = score + bonus\nprint(score)',
+      steps: [
+        {line: 1, vars: {score: 40}, out: '', note: 'A box named score is created holding 40.'},
+        {line: 2, vars: {score: 40, bonus: 8}, out: '', note: 'A second box, bonus, holds 8.'},
+        {line: 3, vars: {score: 48, bonus: 8}, out: '', note: 'Right side first: score + bonus = 40 + 8 = 48. That replaces score.'},
+        {line: 4, vars: {score: 48, bonus: 8}, out: '48', note: 'print reads the current value out of the box.'}
+      ],
+      finalQ: {question: 'At the end, what is inside bonus?', choices: ['8', '48', '40', 'Nothing — it was used up'], answer: 0, why: 'Using a variable never empties it. bonus is still 8; only score was overwritten.'}
+    },
+    parsons: {
+      prompt: 'Build a program that stores a name and an age, then prints the name on one line and the age on the next.',
+      lines: ['name = "Maya"', 'age = 27', 'print(name)', 'print(age)'],
+      expected: ['Maya', '27']
+    },
+    build: {
+      prompt: 'A farmer picks 12 apples, then eats 5. Set apples to 12 and eaten to 5, compute left = apples - eaten, and print left.',
+      starter: 'apples = 0\neaten = 0\nleft = 0\nprint(left)',
+      hint: 'Change the three 0 values: two are given in the prompt, the third is a subtraction.',
+      solution: 'apples = 12\neaten = 5\nleft = apples - eaten\nprint(left)',
+      checks: [{type: 'output', expected: ['7']}, {type: 'var', name: 'left', expected: 7}]
+    }
+  },
+  java: {
+    label: 'Java',
+    teachCode: 'public class Main {\n    public static void main(String[] args) {\n        String name = "Andrew";\n        int age = 30;\n        double height = 5.9;\n        boolean isCoding = true;\n\n        age = age + 1;\n        System.out.println(name);\n        System.out.println(age);\n    }\n}',
+    teachNote: 'Every variable declares its type, every statement ends with ; and the code lives inside a class + main method. Output: Andrew, then 31. In the exercises below, you write the code that goes inside main.',
+    predict: {
+      code: 'int x = 10;\nint y = x + 5;\nx = 20;\nSystem.out.println(y);',
+      question: 'What gets printed?',
+      choices: ['15', '20', '25', '10'],
+      answer: 0,
+      why: 'y was computed when x was still 10, so y holds 15. Changing x afterwards does not reach back and change y — y stored a value, not a formula.'
+    },
+    step: {
+      code: 'int score = 40;\nint bonus = 8;\nscore = score + bonus;\nSystem.out.println(score);',
+      steps: [
+        {line: 1, vars: {score: 40}, out: '', note: 'An int box named score is created holding 40.'},
+        {line: 2, vars: {score: 40, bonus: 8}, out: '', note: 'A second box, bonus, holds 8.'},
+        {line: 3, vars: {score: 48, bonus: 8}, out: '', note: 'Right side first: score + bonus = 40 + 8 = 48. That replaces score.'},
+        {line: 4, vars: {score: 48, bonus: 8}, out: '48', note: 'println reads the current value out of the box.'}
+      ],
+      finalQ: {question: 'At the end, what is inside bonus?', choices: ['8', '48', '40', 'Nothing — it was used up'], answer: 0, why: 'Using a variable never empties it. bonus is still 8; only score was overwritten.'}
+    },
+    parsons: {
+      prompt: 'Build a program that stores a name and an age, then prints the name on one line and the age on the next.',
+      lines: ['String name = "Maya";', 'int age = 27;', 'System.out.println(name);', 'System.out.println(age);'],
+      expected: ['Maya', '27']
+    },
+    build: {
+      prompt: 'A farmer picks 12 apples, then eats 5. Set apples to 12 and eaten to 5, compute left = apples - eaten, and print left.',
+      starter: 'int apples = 0;\nint eaten = 0;\nint left = 0;\nSystem.out.println(left);',
+      hint: 'Change the three 0 values: two are given in the prompt, the third is a subtraction. Do not forget the semicolons.',
+      solution: 'int apples = 12;\nint eaten = 5;\nint left = apples - eaten;\nSystem.out.println(left);',
+      checks: [{type: 'output', expected: ['7']}, {type: 'var', name: 'left', expected: 7}]
+    }
+  }
+},
+{
+  id: 'operators', num: 2, icon: '🧮', title: 'Operators & Strings',
+  tagline: 'Math, remainders, and gluing text together',
+  teach: {
+    body: 'Operators are the verbs of code: + - * / do arithmetic, and % (modulo) gives you the remainder after division — 17 % 5 is 2, because 5 goes into 17 three times with 2 left over. Remainders sound dull until you realize they answer real questions: is this number even? Which row does item 53 land in? What is left after splitting into groups?\n\nStrings have their own version of +: it joins text end to end instead of adding. "code" + "dojo" is "codedojo" — no space is added for you.\n\nOrder of operations works like school math: parentheses first, then * / %, then + -. When in doubt, add parentheses and make your intent obvious.',
+    points: ['% gives the remainder: 17 % 5 = 2', '+ on strings joins them — no automatic space', 'Division is the big language difference (see Compare)', 'Parentheses override the normal order of operations'],
+    compare: 'Python: / always gives a decimal (7 / 2 = 3.5) and // is floor division (7 // 2 = 3). Java: / between two ints throws the decimal away (7 / 2 = 3) — you only get 3.5 if one side is a double. This one difference causes real bugs for people switching languages.'
+  },
+  py: {
+    label: 'Python',
+    teachCode: 'price = 12\nqty = 3\ntotal = price * qty\n\nfirst = "code"\nsecond = "dojo"\nprint(first + " " + second)\nprint(total)',
+    teachNote: 'Output: "code dojo" (the space is an explicit string), then 36.',
+    predict: {
+      code: 'a = 17\nb = 5\nprint(a // b)\nprint(a % b)',
+      question: 'What gets printed?',
+      choices: ['3\n2', '3\n3', '4\n1', '2\n3'],
+      answer: 0,
+      why: '17 // 5 asks "how many whole 5s fit in 17?" — 3. 17 % 5 asks "what is left over?" — 2. Together they are division taken apart.'
+    },
+    step: {
+      code: 'total = 0\nitem = 25\ntotal = total + item\nitem = 10\ntotal = total + item\nprint(total)',
+      steps: [
+        {line: 1, vars: {total: 0}, out: '', note: 'total starts at 0 — the standard starting point for adding things up.'},
+        {line: 2, vars: {total: 0, item: 25}, out: '', note: 'First item costs 25.'},
+        {line: 3, vars: {total: 25, item: 25}, out: '', note: 'total becomes 0 + 25.'},
+        {line: 4, vars: {total: 25, item: 10}, out: '', note: 'item is reused for the second price. total is untouched.'},
+        {line: 5, vars: {total: 35, item: 10}, out: '', note: 'total becomes 25 + 10. This add-to-yourself pattern is called an accumulator.'},
+        {line: 6, vars: {total: 35, item: 10}, out: '35', note: 'Print the final total.'}
+      ],
+      finalQ: {question: 'Why did line 4 not change total?', choices: ['item and total are separate boxes', 'Python skipped line 4', 'total was locked after line 3', '10 is not a valid price'], answer: 0, why: 'Assigning to item only changes item. total changes only on lines that assign to total.'}
+    },
+    parsons: {
+      prompt: 'Build a program that joins a first and last name into one full name and prints it in all caps.',
+      lines: ['first = "ada"', 'last = "lovelace"', 'full = first + " " + last', 'print(full.upper())'],
+      expected: ['ADA LOVELACE']
+    },
+    build: {
+      prompt: 'A rectangle has width 9 and height 4. Compute its area (width * height) and its perimeter (2 * (width + height)), store them in area and perimeter, and print area on one line, perimeter on the next.',
+      starter: 'width = 9\nheight = 4\narea = 0\nperimeter = 0\nprint(area)\nprint(perimeter)',
+      hint: 'area replaces its 0 with width * height. perimeter needs parentheses: 2 * (width + height), otherwise you compute 2 * width + height.',
+      solution: 'width = 9\nheight = 4\narea = width * height\nperimeter = 2 * (width + height)\nprint(area)\nprint(perimeter)',
+      checks: [{type: 'output', expected: ['36', '26']}, {type: 'var', name: 'area', expected: 36}, {type: 'var', name: 'perimeter', expected: 26}]
+    }
+  },
+  java: {
+    label: 'Java',
+    teachCode: 'int price = 12;\nint qty = 3;\nint total = price * qty;\n\nString first = "code";\nString second = "dojo";\nSystem.out.println(first + " " + second);\nSystem.out.println(total);',
+    teachNote: 'Output: "code dojo" (the space is an explicit string), then 36. + with a String on either side joins text — even numbers get converted and glued.',
+    predict: {
+      code: 'int a = 17;\nint b = 5;\nSystem.out.println(a / b);\nSystem.out.println(a % b);',
+      question: 'What gets printed?',
+      choices: ['3\n2', '3.4\n2', '4\n1', '3\n3'],
+      answer: 0,
+      why: 'In Java, int / int discards the decimal part: 17 / 5 is 3, not 3.4. And 17 % 5 is the remainder, 2.'
+    },
+    step: {
+      code: 'int total = 0;\nint item = 25;\ntotal = total + item;\nitem = 10;\ntotal = total + item;\nSystem.out.println(total);',
+      steps: [
+        {line: 1, vars: {total: 0}, out: '', note: 'total starts at 0 — the standard starting point for adding things up.'},
+        {line: 2, vars: {total: 0, item: 25}, out: '', note: 'First item costs 25.'},
+        {line: 3, vars: {total: 25, item: 25}, out: '', note: 'total becomes 0 + 25.'},
+        {line: 4, vars: {total: 25, item: 10}, out: '', note: 'item is reused for the second price. total is untouched.'},
+        {line: 5, vars: {total: 35, item: 10}, out: '', note: 'total becomes 25 + 10. This add-to-yourself pattern is called an accumulator.'},
+        {line: 6, vars: {total: 35, item: 10}, out: '35', note: 'Print the final total.'}
+      ],
+      finalQ: {question: 'Why did line 4 not change total?', choices: ['item and total are separate boxes', 'Java skipped line 4', 'total was locked after line 3', '10 is not a valid price'], answer: 0, why: 'Assigning to item only changes item. total changes only on lines that assign to total.'}
+    },
+    parsons: {
+      prompt: 'Build a program that joins a first and last name into one full name and prints it in all caps.',
+      lines: ['String first = "ada";', 'String last = "lovelace";', 'String full = first + " " + last;', 'System.out.println(full.toUpperCase());'],
+      expected: ['ADA LOVELACE']
+    },
+    build: {
+      prompt: 'A rectangle has width 9 and height 4. Compute its area (width * height) and its perimeter (2 * (width + height)), store them in area and perimeter, and print area on one line, perimeter on the next.',
+      starter: 'int width = 9;\nint height = 4;\nint area = 0;\nint perimeter = 0;\nSystem.out.println(area);\nSystem.out.println(perimeter);',
+      hint: 'area replaces its 0 with width * height. perimeter needs parentheses: 2 * (width + height), otherwise you compute 2 * width + height.',
+      solution: 'int width = 9;\nint height = 4;\nint area = width * height;\nint perimeter = 2 * (width + height);\nSystem.out.println(area);\nSystem.out.println(perimeter);',
+      checks: [{type: 'output', expected: ['36', '26']}, {type: 'var', name: 'area', expected: 36}, {type: 'var', name: 'perimeter', expected: 26}]
+    }
+  }
+},
+{
+  id: 'conditionals', num: 3, icon: '🔀', title: 'Conditionals',
+  tagline: 'Making decisions with if / else',
+  teach: {
+    body: 'So far your programs run every line, top to bottom. Conditionals break that: an if statement checks a true/false question and only runs its block when the answer is true.\n\nChain them and you get a decision ladder: the first true branch wins, everything below it is skipped, and else catches whatever is left. Order matters — put the most specific checks first.\n\nThe questions themselves are built from comparisons (== equal, != not equal, > < >= <=) combined with and / or / not. One classic trap: = assigns, == compares. They look almost identical and do opposite jobs.',
+    points: ['Only the first true branch runs — the rest are skipped', 'else runs only when every check above it was false', '== compares, = assigns — mixing them up is a rite of passage', 'and needs both sides true; or needs only one'],
+    compare: 'Python marks blocks with indentation and a colon, and spells the middle branch elif. Java marks blocks with { braces } and parentheses, and spells it else if. The decision logic is identical — only the punctuation differs.'
+  },
+  py: {
+    label: 'Python',
+    teachCode: 'age = 20\n\nif age >= 18:\n    print("adult")\nelse:\n    print("minor")',
+    teachNote: 'The indented lines are the block. Output: adult.',
+    predict: {
+      code: 'temp = 45\n\nif temp > 80:\n    print("shorts weather")\nelif temp > 50:\n    print("light jacket")\nelse:\n    print("jacket weather")',
+      question: 'What gets printed?',
+      choices: ['shorts weather', 'light jacket', 'jacket weather', 'Nothing — no branch matches'],
+      answer: 2,
+      why: '45 > 80 is false, 45 > 50 is also false, so control falls through to else: jacket weather.'
+    },
+    step: {
+      code: 'score = 72\nif score >= 90:\n    grade = "A"\nelif score >= 70:\n    grade = "B"\nelse:\n    grade = "C"\nprint(grade)',
+      steps: [
+        {line: 1, vars: {score: 72}, out: '', note: 'score starts at 72.'},
+        {line: 2, vars: {score: 72}, out: '', note: 'Check 1: is 72 >= 90? No. Skip the "A" block entirely.'},
+        {line: 4, vars: {score: 72}, out: '', note: 'Check 2: is 72 >= 70? Yes — this branch wins.'},
+        {line: 5, vars: {score: 72, grade: 'B'}, out: '', note: 'grade is set to "B". The else below is now dead — it will not run.'},
+        {line: 8, vars: {score: 72, grade: 'B'}, out: 'B', note: 'Print grade.'}
+      ],
+      finalQ: {question: 'If score were 95, which line would set grade?', choices: ['Line 3', 'Line 5', 'Line 7', 'All three in turn'], answer: 0, why: '95 >= 90 is true at the very first check, so grade = "A" runs on line 3 and the rest of the ladder is skipped.'}
+    },
+    parsons: {
+      prompt: 'Build a program that prints "adult" if age is at least 18, otherwise prints "minor". Age is 16.',
+      lines: ['age = 16', 'if age >= 18:', '    print("adult")', 'else:', '    print("minor")'],
+      expected: ['minor']
+    },
+    build: {
+      prompt: 'num is 14. Decide whether it is even or odd (hint: num % 2 == 0 means even) and store the word "even" or "odd" in result. The program already prints result for you.',
+      starter: 'num = 14\nresult = ""\n# your if/else goes here\nprint(result)',
+      hint: 'if num % 2 == 0: set result to "even" in the block. else: set it to "odd". Remember the colon and indentation.',
+      solution: 'num = 14\nresult = ""\nif num % 2 == 0:\n    result = "even"\nelse:\n    result = "odd"\nprint(result)',
+      checks: [{type: 'output', expected: ['even']}, {type: 'var', name: 'result', expected: 'even'}]
+    }
+  },
+  java: {
+    label: 'Java',
+    teachCode: 'int age = 20;\n\nif (age >= 18) {\n    System.out.println("adult");\n} else {\n    System.out.println("minor");\n}',
+    teachNote: 'The { } braces are the block, and the condition sits in parentheses. Output: adult.',
+    predict: {
+      code: 'int temp = 45;\n\nif (temp > 80) {\n    System.out.println("shorts weather");\n} else if (temp > 50) {\n    System.out.println("light jacket");\n} else {\n    System.out.println("jacket weather");\n}',
+      question: 'What gets printed?',
+      choices: ['shorts weather', 'light jacket', 'jacket weather', 'Nothing — no branch matches'],
+      answer: 2,
+      why: '45 > 80 is false, 45 > 50 is also false, so control falls through to else: jacket weather.'
+    },
+    step: {
+      code: 'int score = 72;\nString grade;\nif (score >= 90) {\n    grade = "A";\n} else if (score >= 70) {\n    grade = "B";\n} else {\n    grade = "C";\n}\nSystem.out.println(grade);',
+      steps: [
+        {line: 1, vars: {score: 72}, out: '', note: 'score starts at 72.'},
+        {line: 3, vars: {score: 72}, out: '', note: 'Check 1: is 72 >= 90? No. Skip the "A" block entirely.'},
+        {line: 5, vars: {score: 72}, out: '', note: 'Check 2: is 72 >= 70? Yes — this branch wins.'},
+        {line: 6, vars: {score: 72, grade: 'B'}, out: '', note: 'grade is set to "B". The else below is now dead — it will not run.'},
+        {line: 10, vars: {score: 72, grade: 'B'}, out: 'B', note: 'Print grade.'}
+      ],
+      finalQ: {question: 'If score were 95, which line would set grade?', choices: ['Line 4', 'Line 6', 'Line 8', 'All three in turn'], answer: 0, why: '95 >= 90 is true at the very first check, so grade = "A" runs on line 4 and the rest of the ladder is skipped.'}
+    },
+    parsons: {
+      prompt: 'Build a program that prints "adult" if age is at least 18, otherwise prints "minor". Age is 16.',
+      lines: ['int age = 16;', 'if (age >= 18) {', '    System.out.println("adult");', '} else {', '    System.out.println("minor");', '}'],
+      expected: ['minor']
+    },
+    build: {
+      prompt: 'num is 14. Decide whether it is even or odd (hint: num % 2 == 0 means even) and store the word "even" or "odd" in result. The program already prints result for you.',
+      starter: 'int num = 14;\nString result = "";\n// your if/else goes here\nSystem.out.println(result);',
+      hint: 'if (num % 2 == 0) { set result to "even" inside the braces } else { set it to "odd" }. ',
+      solution: 'int num = 14;\nString result = "";\nif (num % 2 == 0) {\n    result = "even";\n} else {\n    result = "odd";\n}\nSystem.out.println(result);',
+      checks: [{type: 'output', expected: ['even']}, {type: 'var', name: 'result', expected: 'even'}]
+    }
+  }
+},
+{
+  id: 'loops', num: 4, icon: '🔁', title: 'Loops',
+  tagline: 'Repeating work without repeating code',
+  teach: {
+    body: 'A loop runs the same block again and again so you do not have to paste the same lines ten times. There are two main flavors:\n\nA for loop is for a known count or a known sequence: "do this for each number from 1 to 4." A while loop is for an unknown count: "keep going while this is still true" — it re-checks its condition before every round.\n\nThe pattern you will use more than any other is the accumulator: start a total at 0 before the loop, add into it each round, use it after the loop. And the classic loop bug: if a while loop\'s condition never becomes false, it runs forever. Something inside the loop must move you closer to done.',
+    points: ['for = known count or sequence; while = until a condition changes', 'while re-checks its condition before every round', 'Accumulator: start at 0, add each round, use after', 'Infinite loop = the condition never turns false — always update something'],
+    compare: 'Python loops over ranges and collections directly (range(1, 5) is 1,2,3,4 — it stops before 5). Java\'s classic for spells out all three parts: start; condition; update. Java also has a for-each loop that looks a lot like Python\'s.'
+  },
+  py: {
+    label: 'Python',
+    teachCode: 'total = 0\n\nfor i in range(1, 5):\n    total = total + i\n\nprint(total)',
+    teachNote: 'range(1, 5) gives 1, 2, 3, 4 — it stops before 5. Output: 10.',
+    predict: {
+      code: 'total = 0\nfor i in range(1, 4):\n    total = total + i\nprint(total)',
+      question: 'What gets printed?',
+      choices: ['6', '10', '3', '9'],
+      answer: 0,
+      why: 'The loop runs for i = 1, 2, 3. total goes 0 → 1 → 3 → 6.'
+    },
+    step: {
+      code: 'n = 3\nwhile n > 0:\n    print(n)\n    n = n - 1\nprint("Go!")',
+      steps: [
+        {line: 1, vars: {n: 3}, out: '', note: 'n starts at 3.'},
+        {line: 3, vars: {n: 3}, out: '3', note: 'Check: 3 > 0, true. Print n.'},
+        {line: 4, vars: {n: 2}, out: '3', note: 'n drops to 2 — this line is what guarantees the loop ends.'},
+        {line: 3, vars: {n: 2}, out: '3\n2', note: 'Back to the top. Check: 2 > 0, true. Print n.'},
+        {line: 4, vars: {n: 1}, out: '3\n2', note: 'n drops to 1.'},
+        {line: 3, vars: {n: 1}, out: '3\n2\n1', note: 'Check: 1 > 0, true. Print n.'},
+        {line: 4, vars: {n: 0}, out: '3\n2\n1', note: 'n drops to 0.'},
+        {line: 5, vars: {n: 0}, out: '3\n2\n1\nGo!', note: 'Check: 0 > 0 is false — loop exits, and the line after it finally runs.'}
+      ],
+      finalQ: {question: 'How many times did the loop body run?', choices: ['2', '3', '4', 'Forever'], answer: 1, why: 'Once for each value 3, 2, 1 — three rounds. The fourth check (0 > 0) fails and ends the loop instead of running the body.'}
+    },
+    parsons: {
+      prompt: 'Build a program that uses a loop to add the numbers 1 through 4 into a total and prints the total.',
+      lines: ['total = 0', 'for i in range(1, 5):', '    total = total + i', 'print(total)'],
+      expected: ['10']
+    },
+    build: {
+      prompt: 'Use a loop to add up just the even numbers from 2 to 10 (2 + 4 + 6 + 8 + 10) into total, then print total. Hint: range can take a step — range(2, 11, 2).',
+      starter: 'total = 0\n# your loop goes here\nprint(total)',
+      hint: 'for i in range(2, 11, 2): steps by 2. Inside the loop (indented), add i into total.',
+      solution: 'total = 0\nfor i in range(2, 11, 2):\n    total = total + i\nprint(total)',
+      checks: [{type: 'output', expected: ['30']}, {type: 'var', name: 'total', expected: 30}]
+    }
+  },
+  java: {
+    label: 'Java',
+    teachCode: 'int total = 0;\n\nfor (int i = 1; i < 5; i++) {\n    total = total + i;\n}\n\nSystem.out.println(total);',
+    teachNote: 'The three parts of the for: start i at 1; keep going while i < 5; i++ after each round. Output: 10.',
+    predict: {
+      code: 'int total = 0;\nfor (int i = 1; i < 4; i++) {\n    total = total + i;\n}\nSystem.out.println(total);',
+      question: 'What gets printed?',
+      choices: ['6', '10', '3', '9'],
+      answer: 0,
+      why: 'The condition i < 4 lets the loop run for i = 1, 2, 3. total goes 0 → 1 → 3 → 6.'
+    },
+    step: {
+      code: 'int n = 3;\nwhile (n > 0) {\n    System.out.println(n);\n    n--;\n}\nSystem.out.println("Go!");',
+      steps: [
+        {line: 1, vars: {n: 3}, out: '', note: 'n starts at 3.'},
+        {line: 3, vars: {n: 3}, out: '3', note: 'Check: 3 > 0, true. Print n.'},
+        {line: 4, vars: {n: 2}, out: '3', note: 'n-- drops n to 2 — this line is what guarantees the loop ends.'},
+        {line: 3, vars: {n: 2}, out: '3\n2', note: 'Back to the top. Check: 2 > 0, true. Print n.'},
+        {line: 4, vars: {n: 1}, out: '3\n2', note: 'n drops to 1.'},
+        {line: 3, vars: {n: 1}, out: '3\n2\n1', note: 'Check: 1 > 0, true. Print n.'},
+        {line: 4, vars: {n: 0}, out: '3\n2\n1', note: 'n drops to 0.'},
+        {line: 6, vars: {n: 0}, out: '3\n2\n1\nGo!', note: 'Check: 0 > 0 is false — loop exits, and the line after it finally runs.'}
+      ],
+      finalQ: {question: 'How many times did the loop body run?', choices: ['2', '3', '4', 'Forever'], answer: 1, why: 'Once for each value 3, 2, 1 — three rounds. The fourth check (0 > 0) fails and ends the loop instead of running the body.'}
+    },
+    parsons: {
+      prompt: 'Build a program that uses a loop to add the numbers 1 through 4 into a total and prints the total.',
+      lines: ['int total = 0;', 'for (int i = 1; i < 5; i++) {', '    total = total + i;', '}', 'System.out.println(total);'],
+      expected: ['10']
+    },
+    build: {
+      prompt: 'Use a loop to add up just the even numbers from 2 to 10 (2 + 4 + 6 + 8 + 10) into total, then print total. Hint: the update part of a for can be i += 2.',
+      starter: 'int total = 0;\n// your loop goes here\nSystem.out.println(total);',
+      hint: 'for (int i = 2; i <= 10; i += 2) { and inside the braces, add i into total. Do not forget the closing brace.',
+      solution: 'int total = 0;\nfor (int i = 2; i <= 10; i += 2) {\n    total = total + i;\n}\nSystem.out.println(total);',
+      checks: [{type: 'output', expected: ['30']}, {type: 'var', name: 'total', expected: 30}]
+    }
+  }
+},
+{
+  id: 'functions', num: 5, icon: '🧩', title: 'Functions',
+  tagline: 'Name a job once, call it anywhere',
+  teach: {
+    body: 'A function is a named, reusable block of code. You define it once, and every time you call it, execution jumps into the function, does the job, and comes back with a result.\n\nInputs go in as parameters — the blank slots in the definition. The actual values you pass at call time are arguments, and they land in those slots in order.\n\nThe key concept is return: it hands a value back to the caller and exits the function on the spot. Printing inside a function and returning from one look similar but are opposites — print shows a human, return gives the program a value it can keep using. Functions that return nothing just run their lines and come back empty-handed.',
+    points: ['Define once, call many times — no copy-pasting logic', 'Parameters are the slots; arguments are the values you fill them with', 'return hands a value back AND exits immediately', 'Variables created inside a function are local — they vanish when it returns'],
+    compare: 'Python functions do not declare types: def add(a, b) accepts anything. Java makes the contract explicit — the return type and every parameter type are in the signature, and the compiler enforces them. Java functions also need a home: in real Java they live inside a class (like main does).'
+  },
+  py: {
+    label: 'Python',
+    teachCode: 'def greet(name):\n    return "Hi " + name\n\nmessage = greet("Ruth")\nprint(message)\nprint(greet("Omar"))',
+    teachNote: 'greet returns a string; the caller decides what to do with it. Output: Hi Ruth, then Hi Omar.',
+    predict: {
+      code: 'def triple(x):\n    return x * 3\n\nprint(triple(4) + 1)',
+      question: 'What gets printed?',
+      choices: ['13', '12', '43', 'Nothing — triple only returns, never prints'],
+      answer: 0,
+      why: 'triple(4) returns 12, then 12 + 1 is computed and printed: 13. The return value plugs into the expression exactly where the call was.'
+    },
+    step: {
+      code: 'def add(a, b):\n    return a + b\n\nresult = add(6, 9)\nprint(result)',
+      steps: [
+        {line: 4, vars: {}, out: '', note: 'Line 4 calls add(6, 9). The def on lines 1-2 only registered the function — its body has not run yet. Now we jump in.'},
+        {line: 1, vars: {a: 6, b: 9}, out: '', note: 'Inside add: parameter a gets 6, parameter b gets 9. These are local to this call.'},
+        {line: 2, vars: {a: 6, b: 9}, out: '', note: 'return sends 6 + 9 = 15 back to line 4 and exits. The a and b boxes are discarded.'},
+        {line: 4, vars: {result: 15}, out: '', note: 'Back on line 4, the call is replaced by its result: result = 15.'},
+        {line: 5, vars: {result: 15}, out: '15', note: 'Print result.'}
+      ],
+      finalQ: {question: 'After line 5, could you print the variable a?', choices: ['No — a only existed inside the call', 'Yes — a is 6', 'Yes — a is 15', 'Only inside print()'], answer: 0, why: 'a was a parameter, local to that call. When add returned, its local boxes were thrown away. Only the returned value survived.'}
+    },
+    parsons: {
+      prompt: 'Build a program that defines a function returning "Hi " plus a name, stores the result for "Ruth" in message, and prints it.',
+      lines: ['def greet(name):', '    return "Hi " + name', 'message = greet("Ruth")', 'print(message)'],
+      expected: ['Hi Ruth']
+    },
+    build: {
+      prompt: 'The function area(w, h) should return the area of a rectangle: w * h. Fix the function so the program prints 15.',
+      starter: 'def area(w, h):\n    return 0\n\nprint(area(5, 3))',
+      hint: 'Replace return 0 with a return of the product of the two parameters.',
+      solution: 'def area(w, h):\n    return w * h\n\nprint(area(5, 3))',
+      checks: [{type: 'output', expected: ['15']}]
+    }
+  },
+  java: {
+    label: 'Java',
+    teachCode: 'static String greet(String name) {\n    return "Hi " + name;\n}\n\nString message = greet("Ruth");\nSystem.out.println(message);\nSystem.out.println(greet("Omar"));',
+    teachNote: 'In real Java this method would live inside your class, next to main. Output: Hi Ruth, then Hi Omar.',
+    predict: {
+      code: 'static int triple(int x) {\n    return x * 3;\n}\n\nSystem.out.println(triple(4) + 1);',
+      question: 'What gets printed?',
+      choices: ['13', '12', '43', 'Nothing — triple only returns, never prints'],
+      answer: 0,
+      why: 'triple(4) returns 12, then 12 + 1 is computed and printed: 13. The return value plugs into the expression exactly where the call was.'
+    },
+    step: {
+      code: 'static int add(int a, int b) {\n    return a + b;\n}\n\nint result = add(6, 9);\nSystem.out.println(result);',
+      steps: [
+        {line: 5, vars: {}, out: '', note: 'Line 5 calls add(6, 9). The method on lines 1-3 only registered it — its body has not run yet. Now we jump in.'},
+        {line: 1, vars: {a: 6, b: 9}, out: '', note: 'Inside add: parameter a gets 6, parameter b gets 9. These are local to this call.'},
+        {line: 2, vars: {a: 6, b: 9}, out: '', note: 'return sends 6 + 9 = 15 back to line 5 and exits. The a and b boxes are discarded.'},
+        {line: 5, vars: {result: 15}, out: '', note: 'Back on line 5, the call is replaced by its result: result = 15.'},
+        {line: 6, vars: {result: 15}, out: '15', note: 'Print result.'}
+      ],
+      finalQ: {question: 'After line 5, could you print the variable a?', choices: ['No — a only existed inside the call', 'Yes — a is 6', 'Yes — a is 15', 'Only inside println'], answer: 0, why: 'a was a parameter, local to that call. When add returned, its local boxes were thrown away. Only the returned value survived.'}
+    },
+    parsons: {
+      prompt: 'Build a program that defines a method returning "Hi " plus a name, then prints the result of calling it with "Ruth".',
+      lines: ['static String greet(String name) {', '    return "Hi " + name;', '}', 'System.out.println(greet("Ruth"));'],
+      expected: ['Hi Ruth']
+    },
+    build: {
+      prompt: 'The method area(w, h) should return the area of a rectangle: w * h. Fix the method so the program prints 15.',
+      starter: 'static int area(int w, int h) {\n    return 0;\n}\n\nSystem.out.println(area(5, 3));',
+      hint: 'Replace return 0; with a return of the product of the two parameters — and keep the semicolon.',
+      solution: 'static int area(int w, int h) {\n    return w * h;\n}\n\nSystem.out.println(area(5, 3));',
+      checks: [{type: 'output', expected: ['15']}]
+    }
+  }
+}
+];
+if (typeof module !== 'undefined' && module.exports) module.exports = {CONCEPTS};
+
+</script>
+<script>
+'use strict';
+/* Code Dojo — DE Interview Python Drills (single track).
+   Same exercise shapes as fundamentals, plus habit gates on Build:
+   build.shapeQ   — must answer before the editor unlocks (name the set/shape first)
+   build.verdictQ — must answer after a passing run (verdicts only from printed numbers)
+   predict.crash  — when true, the predict code is expected to ERROR (a real trap). */
+const DE_LESSONS = [
+{
+  id: 'shape-first', num: 1, icon: '🔎', title: 'Shape First: Count & Nulls',
+  tagline: 'Look at the data before you touch it', target: '5 min',
+  teach: {
+    body: 'Every interview problem starts with data you have not looked at. The first 30 seconds are not for coding — they are for shape: how many records, what fields does one record have, and what do the weird values look like?\n\nThen, before any counting, name your sets out loud: "the denominator is ALL events, the numerator is FAILED events." Most wrong DE answers are not code bugs — they are counting the wrong set, fluently.\n\nAnd learn this null lesson early: a field can be empty by design. If reason is only filled in when a login fails, then reason being None does not mean data is missing — it means the login succeeded. Nulls that equal your success count are a design, not a gap.',
+    points: ['Shape first: len(), one full record, the field names — before any logic', 'Name the set and the denominator before you count anything', 'A null that appears exactly on success/failure is by design, not missing data', 'Your counts must sum back to the total — that is your free correctness check'],
+    teachCode: 'events = [\n    {"id": 1, "ok": True, "reason": None},\n    {"id": 2, "ok": False, "reason": "bad_password"},\n    {"id": 3, "ok": True, "reason": None},\n]\n\nprint(len(events))\nprint(events[0])\nprint(events[0].keys())',
+    teachNote: 'Output: 3, then the whole first record, then its keys. Notice reason is None exactly on the successful login — by design.'
+  },
+  predict: {
+    code: 'events = [\n    {"ok": True}, {"ok": False}, {"ok": True},\n    {"ok": False}, {"ok": False},\n]\nsuccess = 0\nfor e in events:\n    if e["ok"]:\n        success = success + 1\nprint(success)',
+    question: 'What gets printed?',
+    choices: ['2', '3', '5', '0'],
+    answer: 0,
+    why: 'Two of the five events have ok = True. The loop counts successes only — the other three are failures.'
+  },
+  step: {
+    code: 'events = [{"ok": True}, {"ok": False}, {"ok": True}, {"ok": False}]\ntotal = 0\nfails = 0\nfor e in events:\n    total = total + 1\n    if not e["ok"]:\n        fails = fails + 1\nprint(total)\nprint(fails)',
+    steps: [
+      {line: 2, vars: {total: 0}, out: '', note: 'Both counters start at 0. Shape is known: 4 events.'},
+      {line: 3, vars: {total: 0, fails: 0}, out: '', note: 'fails starts at 0 too.'},
+      {line: 5, vars: {total: 1, fails: 0}, out: '', note: 'Event 1 (ok): total grows. The if is false, so fails stays.'},
+      {line: 7, vars: {total: 2, fails: 1}, out: '', note: 'Event 2 (failed): total grows AND fails grows.'},
+      {line: 5, vars: {total: 3, fails: 1}, out: '', note: 'Event 3 (ok): only total grows.'},
+      {line: 7, vars: {total: 4, fails: 2}, out: '', note: 'Event 4 (failed): both grow. Sanity check: 2 ok + 2 fails = 4 total ✓'},
+      {line: 8, vars: {total: 4, fails: 2}, out: '4', note: 'Print total.'},
+      {line: 9, vars: {total: 4, fails: 2}, out: '4\n2', note: 'Print fails.'}
+    ],
+    finalQ: {question: 'An event has ok = True. Its reason field is…', choices: ['None — by design, reason only exists on failure', '"success"', 'Missing data — a pipeline gap', 'An empty string'], answer: 0, why: 'reason is populated only when a login fails. None on success is the schema working as designed, not data loss.'}
+  },
+  parsons: {
+    prompt: 'Rebuild the shape-first counting pattern: define the events, count the failures with a comprehension, then print the total and the failure count.',
+    lines: ['events = [{"ok": True}, {"ok": False}, {"ok": False}]', 'fails = len([e for e in events if not e["ok"]])', 'print(len(events))', 'print(fails)'],
+    expected: ['3', '2']
+  },
+  build: {
+    prompt: 'Using the 8 auth events in the starter: print the total number of events, then the number of failures, then the failure rate as a percentage rounded to 1 decimal (fails / total * 100). One value per line, nothing else.',
+    starter: 'events = [\n    {"id": 1, "user": "u1", "ok": True, "reason": None},\n    {"id": 2, "user": "u2", "ok": False, "reason": "bad_password"},\n    {"id": 3, "user": "u1", "ok": True, "reason": None},\n    {"id": 4, "user": "u3", "ok": False, "reason": "bad_password"},\n    {"id": 5, "user": "u2", "ok": True, "reason": None},\n    {"id": 6, "user": "u4", "ok": False, "reason": "locked"},\n    {"id": 7, "user": "u3", "ok": True, "reason": None},\n    {"id": 8, "user": "u1", "ok": True, "reason": None},\n]\n\ntotal = 0\nfails = 0\n# count here\nprint(total)\nprint(fails)\nprint(0)',
+    hint: 'Loop the events: total grows every time, fails grows when not e["ok"]. Replace the final 0 with round(fails / total * 100, 1).',
+    solution: 'events = [\n    {"id": 1, "user": "u1", "ok": True, "reason": None},\n    {"id": 2, "user": "u2", "ok": False, "reason": "bad_password"},\n    {"id": 3, "user": "u1", "ok": True, "reason": None},\n    {"id": 4, "user": "u3", "ok": False, "reason": "bad_password"},\n    {"id": 5, "user": "u2", "ok": True, "reason": None},\n    {"id": 6, "user": "u4", "ok": False, "reason": "locked"},\n    {"id": 7, "user": "u3", "ok": True, "reason": None},\n    {"id": 8, "user": "u1", "ok": True, "reason": None},\n]\n\ntotal = 0\nfails = 0\nfor e in events:\n    total = total + 1\n    if not e["ok"]:\n        fails = fails + 1\nprint(total)\nprint(fails)\nprint(round(fails / total * 100, 1))',
+    checks: [{type: 'output', expected: ['8', '3', '37.5']}, {type: 'var', name: 'total', expected: 8}, {type: 'var', name: 'fails', expected: 3}],
+    shapeQ: {question: 'Before the counting loop, what do you print first?', choices: ['len(events) and events[0] — the shape', 'The final failure rate', 'A sorted ranking of users', 'The verdict sentence'], answer: 0, why: 'Shape first, always: how many records, and what one whole record looks like. Everything else is built on that.'},
+    verdictQ: {question: 'Your run printed 8, 3, 37.5. Which verdict are you allowed to say?', choices: ['Failures are 37.5% of all events (3 of 8)', 'bad_password is the top failure reason', 'u1 fails the most', 'Most logins fail'], answer: 0, why: 'Only the first verdict uses numbers you actually printed. The others may be true — but you never computed them, so in an interview they score as guesses.'}
+  }
+},
+{
+  id: 'group-count', num: 2, icon: '🗂️', title: 'Group & Count',
+  tagline: 'The bucket pattern you will use forever', target: '5 min',
+  teach: {
+    body: 'Grouping is the single most common DE coding move: walk the records once, and drop each one into a bucket labeled by some field. The bucket pattern is one line: counts[x] = counts.get(x, 0) + 1. The .get with a default of 0 is what saves you from KeyError the first time a label appears.\n\nTwo disciplines make this interview-grade. First, your bucket counts must sum back to the number of records you walked — if they do not, a record fell on the floor. Second, when you rank the buckets, you sort counts.items() — the (label, count) pairs — never the dict itself. Sorting a dict sorts only its labels and throws your counts away.',
+    points: ['Bucket pattern: counts[x] = counts.get(x, 0) + 1', 'Counts must sum to the record count — check it', 'Rank with sorted(counts.items(), key=..., reverse=True)', 'sorted(a_dict) alone sorts labels, not counts — the classic silent wrong answer'],
+    teachCode: 'words = ["nl", "us", "nl", "de", "nl"]\ncounts = {}\nfor w in words:\n    counts[w] = counts.get(w, 0) + 1\nprint(counts)\nprint(sum(counts.values()))',
+    teachNote: 'Output: {\'nl\': 3, \'us\': 1, \'de\': 1} and then 5 — the counts sum back to the 5 words. That sum is your receipt.'
+  },
+  predict: {
+    code: 'counts = {}\nfor w in ["a", "b", "a"]:\n    counts[w] = counts.get(w, 0) + 1\nprint(counts)',
+    question: 'What gets printed?',
+    choices: ["{'a': 2, 'b': 1}", "{'a': 1, 'b': 1}", "['a', 'b']", 'It crashes — counts[w] does not exist yet'],
+    answer: 0,
+    why: 'Each "a" increments its bucket (the second time, .get returns the existing 1). Final: a = 2, b = 1. No crash — .get(x, 0) is exactly the crash-avoider.'
+  },
+  step: {
+    code: 'countries = ["NL", "US", "NL"]\ncounts = {}\nfor c in countries:\n    counts[c] = counts.get(c, 0) + 1\nprint(counts)',
+    steps: [
+      {line: 2, vars: {counts: {}}, out: '', note: 'Empty bucket dict.'},
+      {line: 4, vars: {counts: {NL: 1}}, out: '', note: '"NL" is new: .get returns 0, +1 stores 1.'},
+      {line: 4, vars: {counts: {NL: 1, US: 1}}, out: '', note: '"US" is new too: its bucket starts at 1.'},
+      {line: 4, vars: {counts: {NL: 2, US: 1}}, out: '', note: '"NL" again: .get returns the existing 1, +1 makes 2. Sum check: 2 + 1 = 3 records ✓'},
+      {line: 5, vars: {counts: {NL: 2, US: 1}}, out: "{'NL': 2, 'US': 1}", note: 'Print the buckets.'}
+    ],
+    finalQ: {question: 'Why counts.get(c, 0) instead of counts[c] on the right side?', choices: ['counts[c] crashes with KeyError the first time a label appears', 'It is faster', 'It sorts the dict', 'It converts c to a string'], answer: 0, why: 'The first time "NL" shows up there is no bucket yet. counts["NL"] would raise KeyError; .get(c, 0) quietly starts the bucket at 0.'}
+  },
+  parsons: {
+    prompt: 'Rebuild the ranking pattern: given a counts dict, rank its pairs by count (highest first) and print each label with its count.',
+    lines: ['counts = {"NL": 4, "US": 3, "DE": 2}', 'ranked = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)', 'for k, v in ranked:', '    print(k, v)'],
+    expected: ['NL 4', 'US 3', 'DE 2']
+  },
+  build: {
+    prompt: 'Count the 10 signups in the starter by country. Then print one line per country, ranked by count (highest first), in exactly this format: NL: 4',
+    starter: 'countries = ["NL", "US", "NL", "DE", "NL", "US", "GB", "NL", "US", "DE"]\n\ncounts = {}\n# group here\n# then rank and print here',
+    hint: 'First loop: counts[c] = counts.get(c, 0) + 1. Then: for k, v in sorted(counts.items(), key=lambda kv: kv[1], reverse=True): print(f"{k}: {v}")',
+    solution: 'countries = ["NL", "US", "NL", "DE", "NL", "US", "GB", "NL", "US", "DE"]\n\ncounts = {}\nfor c in countries:\n    counts[c] = counts.get(c, 0) + 1\nranked = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)\nfor k, v in ranked:\n    print(f"{k}: {v}")',
+    checks: [{type: 'output', expected: ['NL: 4', 'US: 3', 'DE: 2', 'GB: 1']}],
+    shapeQ: {question: 'What is the receipt that your grouping lost nothing?', choices: ['The bucket counts sum to 10 — the number of signups', 'The dict has 4 keys', 'The output is sorted', 'The first key is NL'], answer: 0, why: '4 + 3 + 2 + 1 = 10. If your buckets summed to 9, one signup fell on the floor and no ranking built on them can be trusted.'},
+    verdictQ: {question: 'Your run printed NL: 4, US: 3, DE: 2, GB: 1. Which verdict is allowed?', choices: ['NL is the largest signup group with 4 of 10', 'NL users fail more often', 'NL has a 40% failure rate', 'GB should be dropped from the data'], answer: 0, why: 'You printed signup counts — nothing about failures or rates. One printed ranking supports exactly one verdict: who is biggest.'}
+  }
+},
+{
+  id: 'rank-by-rate', num: 3, icon: '📊', title: 'Rank by Rate, Not Count',
+  tagline: 'Sort by a number you compute, not the bucket itself', target: '6 min',
+  teach: {
+    body: 'Here is where good counters lose points: the question asks who is worst by RATE, and the code ranks by raw COUNT because count is what is sitting in the bucket. Different question, different answer, zero error messages.\n\nThe fix has two parts. First, each bucket must hold both numbers the rate needs — total and fails — as a little dict: {"total": 0, "fail": 0}. Second, the sort key must reach into the bucket and pull out a computed number: key=lambda kv: kv[1]["fail"] / kv[1]["total"]. If your key ever returns the bucket dict itself, Python cannot compare dicts and crashes — loudly, thankfully.\n\nLast trap, and it is a judgment trap: rates on tiny denominators lie. 2 failures out of 3 events is 66.7% — and nearly meaningless next to 42.9% on 700 events. A strong answer names the denominator when it reports the rate.',
+    points: ['Bucket holds {"total", "fail"} — both halves of the rate', 'Sort key pulls a computed NUMBER out of the bucket', 'key returning the dict itself = TypeError crash (dicts are not comparable)', 'Always report the denominator next to a rate — small n, weak claim'],
+    teachCode: 'buckets = {\n    "v1": {"total": 7, "fail": 3},\n    "v2": {"total": 8, "fail": 5},\n}\nranked = sorted(buckets.items(), key=lambda kv: kv[1]["fail"] / kv[1]["total"], reverse=True)\nfor k, v in ranked:\n    print(k, round(v["fail"] / v["total"] * 100, 1))',
+    teachNote: 'Output: v2 62.5, then v1 42.9. Ranked by rate — v1 has fewer failures than v2 by count too, but the key never looks at raw counts.'
+  },
+  predict: {
+    crash: true,
+    code: 'buckets = {\n    "v1": {"total": 7, "fail": 3},\n    "v2": {"total": 8, "fail": 5},\n}\nranked = sorted(buckets.items(), key=lambda kv: kv[1], reverse=True)\nprint(ranked)',
+    question: 'What happens when this runs?',
+    choices: ['It crashes — the key returns dicts, and dicts cannot be compared', 'It prints v2 first, then v1', 'It prints v1 first, then v2', 'It prints the buckets sorted by label'],
+    answer: 0,
+    why: 'kv[1] is the bucket dict {"total": ..., "fail": ...}. Sorting needs to compare two of those, and Python refuses: dicts have no order. The key must pull a number out — kv[1]["fail"] / kv[1]["total"]. This exact crash is a classic live-round moment; recognizing it on sight is the skill.'
+  },
+  step: {
+    code: 'bucket = {"total": 3, "fail": 2}\nprint(round(bucket["fail"] / bucket["total"] * 100, 1))',
+    steps: [
+      {line: 1, vars: {bucket: {total: 3, fail: 2}}, out: '', note: 'One bucket: 3 attempts, 2 failures. Both halves of the rate are here.'},
+      {line: 2, vars: {bucket: {total: 3, fail: 2}}, out: '66.7', note: 'Inside the print: fail / total * 100 = 2 / 3 * 100, rounded to 66.7. That computed number is exactly what a sort key must pull out of the bucket. And the denominator (3!) is tiny — say so when you report the rate.'}
+    ],
+    finalQ: {question: 'A key=lambda kv: kv[1] sorts buckets by…', choices: ['Nothing — it crashes, dicts are not comparable', 'The bucket total', 'The bucket label', 'Insertion order'], answer: 0, why: 'kv[1] is the whole bucket dict. The moment sorting compares two buckets it raises TypeError. Keys must return numbers (or strings/tuples of them).'}
+  },
+  parsons: {
+    prompt: 'Rebuild the correct ranking: buckets are given; rank them by failure rate and print each label with its rounded rate.',
+    lines: ['buckets = {"v1": {"total": 7, "fail": 3}, "v2": {"total": 8, "fail": 5}}', 'ranked = sorted(buckets.items(), key=lambda kv: kv[1]["fail"] / kv[1]["total"], reverse=True)', 'for k, v in ranked:', '    print(k, round(v["fail"] / v["total"] * 100, 1))'],
+    expected: ['v2 62.5', 'v1 42.9']
+  },
+  build: {
+    prompt: 'The starter has 18 login attempts across app versions v1, v2, v3. Build a bucket per version holding total and fail counts, rank by failure rate (highest first), and print one line per version exactly like: v3: 66.7%',
+    starter: 'attempts = [\n    {"v": "v1", "ok": True}, {"v": "v1", "ok": False}, {"v": "v1", "ok": True},\n    {"v": "v1", "ok": False}, {"v": "v1", "ok": True}, {"v": "v1", "ok": True},\n    {"v": "v1", "ok": False},\n    {"v": "v2", "ok": False}, {"v": "v2", "ok": True}, {"v": "v2", "ok": False},\n    {"v": "v2", "ok": False}, {"v": "v2", "ok": True}, {"v": "v2", "ok": False},\n    {"v": "v2", "ok": True}, {"v": "v2", "ok": False},\n    {"v": "v3", "ok": False}, {"v": "v3", "ok": True}, {"v": "v3", "ok": False},\n]\n\nbuckets = {}\n# bucket, rank, print here',
+    hint: 'Per attempt: if v not in buckets, create {"total": 0, "fail": 0}; total += 1; if not ok, fail += 1 (use buckets[v]["total"] style updates). Rank with key=lambda kv: kv[1]["fail"] / kv[1]["total"], reverse=True. Print f"{k}: {round(rate * 100, 1)}%" — or compute the percent inside the f-string.',
+    solution: 'attempts = [\n    {"v": "v1", "ok": True}, {"v": "v1", "ok": False}, {"v": "v1", "ok": True},\n    {"v": "v1", "ok": False}, {"v": "v1", "ok": True}, {"v": "v1", "ok": True},\n    {"v": "v1", "ok": False},\n    {"v": "v2", "ok": False}, {"v": "v2", "ok": True}, {"v": "v2", "ok": False},\n    {"v": "v2", "ok": False}, {"v": "v2", "ok": True}, {"v": "v2", "ok": False},\n    {"v": "v2", "ok": True}, {"v": "v2", "ok": False},\n    {"v": "v3", "ok": False}, {"v": "v3", "ok": True}, {"v": "v3", "ok": False},\n]\n\nbuckets = {}\nfor a in attempts:\n    v = a["v"]\n    if v not in buckets:\n        buckets[v] = {"total": 0, "fail": 0}\n    buckets[v]["total"] += 1\n    if not a["ok"]:\n        buckets[v]["fail"] += 1\nranked = sorted(buckets.items(), key=lambda kv: kv[1]["fail"] / kv[1]["total"], reverse=True)\nfor k, b in ranked:\n    rate = round(b["fail"] / b["total"] * 100, 1)\n    print(f"{k}: {rate}%")',
+    checks: [{type: 'output', expected: ['v3: 66.7%', 'v2: 62.5%', 'v1: 42.9%']}],
+    shapeQ: {question: 'Before any rate exists, what must each version bucket hold?', choices: ['Both total and fail counts', 'Only the rate', 'Only the rank', 'The sorted keys'], answer: 0, why: 'A rate is fail / total. If the bucket only stored fails, the rate is unrecoverable — you would have to re-walk the data.'},
+    verdictQ: {question: 'Your ranking puts v3 first at 66.7%. What must the verdict include to be honest?', choices: ['The denominator — 66.7% is 2 of only 3 events', 'A claim that v3 is definitely the buggiest version', 'A claim that v3 caused the failures', 'Nothing — the ranking speaks for itself'], answer: 0, why: '2 of 3 is the weakest kind of evidence. Naming the denominator is what separates an engineer reporting a rate from a headline reporting one.'}
+  }
+},
+{
+  id: 'latest-per-key', num: 4, icon: '🕐', title: 'Latest Per Key',
+  tagline: 'Keep the whole record, compare timestamps', target: '6 min',
+  teach: {
+    body: '"Latest record per user" is a top-five DE interview pattern, and it punishes one specific shortcut: storing only the field you think you need. If latest[user] holds just the device, the next record arrives and you have nothing to compare its timestamp against. The shortcut eats itself.\n\nThe durable pattern: latest[user] holds the WHOLE record. A new record replaces it only when its timestamp is strictly greater. Whole records also survive the follow-up question — "and what plan was that user on?" — because the rest of the fields are still there.\n\nAnd note the silent assumption: input order is not time order. Records arrive shuffled; the comparison against the stored timestamp is the only thing protecting you.',
+    points: ['Store the whole record per key, never just one field', 'Replace only when new_ts > stored_ts (strictly greater — ties keep the first)', 'Never trust arrival order to be time order', 'The output step is separate: sort the keys when you print'],
+    teachCode: 'events = [\n    {"u": "a", "ts": 9, "d": "new"},\n    {"u": "a", "ts": 5, "d": "old"},\n]\nlatest = {}\nfor e in events:\n    u = e["u"]\n    if u not in latest or e["ts"] > latest[u]["ts"]:\n        latest[u] = e\nprint(latest["a"]["d"])',
+    teachNote: 'Output: new — even though "new" arrived FIRST. The ts comparison, not arrival order, decides. The naive overwrite would have printed old.'
+  },
+  predict: {
+    code: 'events = [\n    {"u": "a", "ts": 9, "d": "new"},\n    {"u": "a", "ts": 5, "d": "old"},\n]\nlatest = {}\nfor e in events:\n    latest[e["u"]] = e["d"]\nprint(latest["a"])',
+    question: 'What gets printed?',
+    choices: ['old', 'new', '9', 'It crashes'],
+    answer: 0,
+    why: 'This version blindly overwrites: the ts-5 record arrives last and replaces the ts-9 record. It also stored only the device, so it could not have compared timestamps even if it wanted to. Two bugs, one pattern.'
+  },
+  step: {
+    code: 'events = [{"user": "u1", "ts": 100, "device": "phone"}, {"user": "u1", "ts": 300, "device": "laptop"}, {"user": "u1", "ts": 200, "device": "tablet"}]\nlatest = {}\nfor e in events:\n    u = e["user"]\n    if u not in latest or e["ts"] > latest[u]["ts"]:\n        latest[u] = e\nprint(latest["u1"]["device"])',
+    steps: [
+      {line: 2, vars: {latest: {}}, out: '', note: 'latest starts empty.'},
+      {line: 6, vars: {latest: {u1: {user: 'u1', ts: 100, device: 'phone'}}}, out: '', note: 'ts 100: u1 not in latest yet, so the whole record is stored.'},
+      {line: 6, vars: {latest: {u1: {user: 'u1', ts: 300, device: 'laptop'}}}, out: '', note: 'ts 300 > stored 100: the laptop record replaces it.'},
+      {line: 5, vars: {latest: {u1: {user: 'u1', ts: 300, device: 'laptop'}}}, out: '', note: 'ts 200 arrives LAST but is OLDER than 300: the condition is false, tablet is rejected. This line is the whole lesson.'},
+      {line: 7, vars: {latest: {u1: {user: 'u1', ts: 300, device: 'laptop'}}}, out: 'laptop', note: 'The latest device is laptop — decided by timestamps, not arrival order.'}
+    ],
+    finalQ: {question: 'Why store the whole record instead of just the device?', choices: ['The next comparison needs the stored timestamp — and follow-ups need the other fields', 'Dicts cannot hold strings', 'It uses less memory', 'It sorts automatically'], answer: 0, why: 'Without the stored ts there is nothing to compare the next record against. Whole records are what make the pattern work at all.'}
+  },
+  parsons: {
+    prompt: 'Rebuild the latest-per-key pattern and print the winning device.',
+    lines: ['events = [{"u": "a", "ts": 5, "d": "phone"}, {"u": "a", "ts": 9, "d": "laptop"}]', 'latest = {}', 'for e in events:', '    u = e["u"]', '    if u not in latest or e["ts"] > latest[u]["ts"]:', '        latest[u] = e', 'print(latest["a"]["d"])'],
+    expected: ['laptop']
+  },
+  build: {
+    prompt: 'From the 6 check-in records in the starter, find the latest record per user. Print one line per user, users in alphabetical order, exactly like: u1 laptop',
+    starter: 'events = [\n    {"user": "u1", "ts": 100, "device": "phone"},\n    {"user": "u1", "ts": 300, "device": "laptop"},\n    {"user": "u2", "ts": 150, "device": "phone"},\n    {"user": "u1", "ts": 200, "device": "tablet"},\n    {"user": "u2", "ts": 120, "device": "laptop"},\n    {"user": "u3", "ts": 400, "device": "watch"},\n]\n\nlatest = {}\n# fill latest here\n# then print sorted by user here',
+    hint: 'The pattern from the lesson: replace latest[u] only when the new ts is greater. Then: for u in sorted(latest): print(u, latest[u]["device"])',
+    solution: 'events = [\n    {"user": "u1", "ts": 100, "device": "phone"},\n    {"user": "u1", "ts": 300, "device": "laptop"},\n    {"user": "u2", "ts": 150, "device": "phone"},\n    {"user": "u1", "ts": 200, "device": "tablet"},\n    {"user": "u2", "ts": 120, "device": "laptop"},\n    {"user": "u3", "ts": 400, "device": "watch"},\n]\n\nlatest = {}\nfor e in events:\n    u = e["user"]\n    if u not in latest or e["ts"] > latest[u]["ts"]:\n        latest[u] = e\nfor u in sorted(latest):\n    print(u, latest[u]["device"])',
+    checks: [{type: 'output', expected: ['u1 laptop', 'u2 phone', 'u3 watch']}],
+    shapeQ: {question: 'What does latest[user] need to hold?', choices: ['The whole record', 'Only the device', 'Only the timestamp', 'A running count'], answer: 0, why: 'The whole record carries the ts you compare against AND every field a follow-up might ask for. Storing one field is how this pattern dies.'},
+    verdictQ: {question: 'Your output: u1 laptop, u2 phone, u3 watch. Which verdict is allowed?', choices: ["u1's latest check-in device is the laptop (ts 300)", 'u1 prefers laptops', 'u2 has gone inactive', 'Tablets are being retired'], answer: 0, why: 'The output supports a statement about the latest records only. Preferences, inactivity, and fleet plans were never in the data you printed.'}
+  }
+},
+{
+  id: 'safe-join', num: 5, icon: '🔗', title: 'Join Without Fan-Out',
+  tagline: 'Index first, and check your keys are unique', target: '6 min',
+  teach: {
+    body: 'Every DE eventually ships a join that quietly doubles their numbers. The mechanism is fan-out: if the "one" side of a join has a key twice, every matching row on the other side gets duplicated — counts inflate, sums inflate, and nothing errors.\n\nThe Python version of protection is the dict index: build {id: record} from the dimension table first. A dict physically cannot hold a key twice, so building the index forces the duplicate question into the open — if the source has dupes, you decide which one wins instead of the join deciding for you.\n\nAnd the left-join habit: events can reference ids that do not exist in the dimension. Look them up with .get() and count the misses as their own bucket — never silently drop them, never crash on them.',
+    points: ['Fan-out: a duplicated join key multiplies every matching row', 'Check uniqueness before joining: rows vs distinct keys', 'Build a dict index {id: whole record} — dupes become a decision, not an accident', 'Missing keys are a bucket ("unknown"), not a crash and not a silent drop'],
+    teachCode: 'users = [\n    {"id": "u1", "name": "Ana"},\n    {"id": "u1", "name": "Ana Duplicate"},\n    {"id": "u2", "name": "Ben"},\n]\nprint(len(users))\nprint(len(set([u["id"] for u in users])))',
+    teachNote: 'Output: 3 rows but only 2 distinct ids. That mismatch is the fan-out alarm — joining events onto this table raw would count every u1 event twice.'
+  },
+  predict: {
+    code: 'users = [\n    {"id": "u1", "name": "Ana"},\n    {"id": "u1", "name": "Ana"},\n    {"id": "u2", "name": "Ben"},\n]\nevent_users = ["u1", "u1", "u2"]\njoined = 0\nfor uid in event_users:\n    for u in users:\n        if u["id"] == uid:\n            joined = joined + 1\nprint(joined)',
+    question: 'A nested-loop join counts matching row pairs. What gets printed?',
+    choices: ['5', '3', '4', '6'],
+    answer: 0,
+    why: 'Each of the two u1 events matches BOTH u1 rows in users (2 × 2 = 4 pairs), plus 1 pair for u2: 5 joined rows out of 3 events. That inflation is fan-out, counted exactly.'
+  },
+  step: {
+    code: 'users = [{"id": "u1", "name": "Ana"}, {"id": "u2", "name": "Ben"}]\nindex = {}\nfor u in users:\n    index[u["id"]] = u["name"]\nprint(index["u2"])\nprint(len(index))',
+    steps: [
+      {line: 2, vars: {index: {}}, out: '', note: 'Empty index.'},
+      {line: 4, vars: {index: {u1: 'Ana'}}, out: '', note: 'u1 indexed by id, holding the name.'},
+      {line: 4, vars: {index: {u1: 'Ana', u2: 'Ben'}}, out: '', note: 'u2 added. One entry per id — a dict cannot fan out.'},
+      {line: 5, vars: {index: {u1: 'Ana', u2: 'Ben'}}, out: 'Ben', note: 'Lookup by id: instant, exactly one answer.'},
+      {line: 6, vars: {index: {u1: 'Ana', u2: 'Ben'}}, out: 'Ben\n2', note: 'Two ids, two entries — uniqueness enforced by construction.'}
+    ],
+    finalQ: {question: 'If users had a second u1 row, what would building this index do?', choices: ['Silently keep the last u1 — which is why you check uniqueness BEFORE indexing', 'Crash with a duplicate-key error', 'Keep both u1 rows', 'Double every u1 lookup'], answer: 0, why: 'Dict assignment overwrites without a sound. The index protects you from fan-out but hides dupes — so the uniqueness check (rows vs distinct ids) comes first.'}
+  },
+  parsons: {
+    prompt: 'Rebuild the safe pattern: index the users by id, then count events per name through the index.',
+    lines: ['users = [{"id": "u1", "name": "Ana"}, {"id": "u2", "name": "Ben"}]', 'events = ["u1", "u2", "u1"]', 'index = {}', 'for u in users:', '    index[u["id"]] = u["name"]', 'counts = {}', 'for uid in events:', '    name = index[uid]', '    counts[name] = counts.get(name, 0) + 1', 'print(counts)'],
+    expected: ["{'Ana': 2, 'Ben': 1}"]
+  },
+  build: {
+    prompt: 'Count login events per user name using the users table in the starter. Print one line per known user, alphabetical by name, like: Ana: 3 — then one final line for events whose user id is not in the table, like: unknown: 2',
+    starter: 'users = [\n    {"id": "u1", "name": "Ana"},\n    {"id": "u2", "name": "Ben"},\n    {"id": "u3", "name": "Cy"},\n]\nevent_users = ["u1", "u2", "u1", "u9", "u3", "u1", "u2", "u9"]\n\nindex = {}\ncounts = {}\nunknown = 0\n# index, count, print here',
+    hint: 'Index first: index[u["id"]] = u["name"]. Then per event id: if it is in index, bucket its name; else unknown += 1. Print names via sorted(counts), then the unknown line.',
+    solution: 'users = [\n    {"id": "u1", "name": "Ana"},\n    {"id": "u2", "name": "Ben"},\n    {"id": "u3", "name": "Cy"},\n]\nevent_users = ["u1", "u2", "u1", "u9", "u3", "u1", "u2", "u9"]\n\nindex = {}\nfor u in users:\n    index[u["id"]] = u["name"]\ncounts = {}\nunknown = 0\nfor uid in event_users:\n    if uid in index:\n        name = index[uid]\n        counts[name] = counts.get(name, 0) + 1\n    else:\n        unknown = unknown + 1\nfor name in sorted(counts):\n    print(f"{name}: {counts[name]}")\nprint(f"unknown: {unknown}")',
+    checks: [{type: 'output', expected: ['Ana: 3', 'Ben: 2', 'Cy: 1', 'unknown: 2']}],
+    shapeQ: {question: 'Before joining anything, what do you check on the users table?', choices: ['That id is unique — row count vs distinct id count', 'That it is sorted by name', 'That every user has events', 'Nothing — joins are safe'], answer: 0, why: '3 rows and 3 distinct ids here, so the join is safe. If those two numbers ever disagree, every count downstream is inflated.'},
+    verdictQ: {question: 'Your output ends with unknown: 2. What is the right move?', choices: ['Report them as their own bucket — 2 of 8 events reference a missing user', 'Drop them silently', 'Assign them to Ana', 'Treat the whole run as failed'], answer: 0, why: 'Missing keys are data, not noise: 25% of events pointing at a nonexistent user is itself a finding (deleted users? a sync lag?). Bucket and report.'}
+  }
+},
+{
+  id: 'api-ingestion', num: 6, icon: '📥', title: 'Paginated API Ingestion',
+  tagline: 'Flatten pages, dedupe by id, stay idempotent', target: '6 min',
+  teach: {
+    body: 'APIs hand you data in pages, and pages overlap — a record that straddles a page boundary shows up twice. If your pipeline just glues the pages together, every count downstream is quietly wrong, and re-running the pipeline makes it wrong-er.\n\nThe ingestion pattern has three moving parts: walk page by page, keep a seen set of ids, and append a record only the first time its id appears (keep FIRST — the earliest version of the record — unless the problem says otherwise). With that set in place the pipeline is idempotent: run it twice, get the same table.\n\nPrint a checkpoint per page — "after page 2: 5 unique" — because when page 47 of 200 misbehaves, checkpoints are how you find it without re-reading the whole log.',
+    points: ['Pages overlap at boundaries — naive flatten double-counts', 'Dedupe by id with a seen set; keep the FIRST occurrence', 'Idempotent = re-running changes nothing', 'Checkpoint prints per page: cumulative unique count'],
+    teachCode: 'pages = [[1, 2, 3], [3, 4, 5], [5, 6]]\nseen = set()\nfor page in pages:\n    for x in page:\n        seen.add(x)\n    print(len(seen))',
+    teachNote: 'Output: 3, then 5, then 6 — the checkpoints. 8 delivered values, 6 unique records: ids 3 and 5 each arrived twice.'
+  },
+  predict: {
+    code: 'pages = [[1, 2, 3], [3, 4, 5], [5, 6]]\nall_items = []\nfor page in pages:\n    for x in page:\n        all_items.append(x)\nprint(len(all_items))',
+    question: 'No dedupe — just flatten everything. What gets printed?',
+    choices: ['8', '6', '9', '3'],
+    answer: 0,
+    why: 'The pages hold 3 + 3 + 2 = 8 values, so a naive flatten appends 8 times. The unique records are only 6 (ids 3 and 5 are duplicated at the page boundaries) — flattening counts deliveries, not records.'
+  },
+  step: {
+    code: 'pages = [[1, 2], [2, 3]]\nseen = set()\nclean = []\nfor page in pages:\n    for x in page:\n        if x not in seen:\n            seen.add(x)\n            clean.append(x)\nprint(clean)',
+    steps: [
+      {line: 2, vars: {seen: []}, out: '', note: 'seen starts empty (shown as a list of its members).'},
+      {line: 3, vars: {seen: [], clean: []}, out: '', note: 'clean starts empty too.'},
+      {line: 8, vars: {seen: [1, 2], clean: [1, 2]}, out: '', note: 'Page 1 done: both ids are new, both kept.'},
+      {line: 6, vars: {seen: [1, 2], clean: [1, 2]}, out: '', note: 'Page 2 opens with id 2 — already in seen. The if is false: skipped. This check is the dedupe.'},
+      {line: 8, vars: {seen: [1, 2, 3], clean: [1, 2, 3]}, out: '', note: 'Id 3 is new: kept. Page 2 done.'},
+      {line: 9, vars: {seen: [1, 2, 3], clean: [1, 2, 3]}, out: '[1, 2, 3]', note: 'Four deliveries became three records.'}
+    ],
+    finalQ: {question: 'Why keep the FIRST occurrence of a duplicated id?', choices: ['It is the earliest version of the record — later copies are boundary echoes, and the rule is decided up front', 'First is always fastest', 'The last copy is corrupt', 'Sets require it'], answer: 0, why: 'The duplicated record is the same record straddling a page boundary. Keep-first vs keep-last is a spec decision — but it must be a decision, not an accident of loop order.'}
+  },
+  parsons: {
+    prompt: 'Rebuild the ingestion pattern over two small pages and print the unique count.',
+    lines: ['pages = [[1, 2, 3], [3, 4]]', 'seen = set()', 'clean = []', 'for page in pages:', '    for x in page:', '        if x not in seen:', '            seen.add(x)', '            clean.append(x)', 'print(len(clean))'],
+    expected: ['4']
+  },
+  build: {
+    prompt: 'Ingest the 3 pages of records in the starter. Dedupe by id, keeping the FIRST occurrence of each record. Then print: the number of unique records, the list of their ids in the order kept, and the src of the record with id 3 (to prove which copy you kept). One per line.',
+    starter: 'pages = [\n    [{"id": 1, "src": "p1"}, {"id": 2, "src": "p1"}, {"id": 3, "src": "p1"}],\n    [{"id": 3, "src": "p2"}, {"id": 4, "src": "p2"}, {"id": 5, "src": "p2"}],\n    [{"id": 5, "src": "p3"}, {"id": 6, "src": "p3"}],\n]\n\nseen = set()\nclean = []\n# ingest here\n# then the three prints here',
+    hint: 'Double loop (page, then record). If rec["id"] not in seen: add it and append the record. Prints: len(clean), [r["id"] for r in clean], and find id 3 — its src should be the first page version.',
+    solution: 'pages = [\n    [{"id": 1, "src": "p1"}, {"id": 2, "src": "p1"}, {"id": 3, "src": "p1"}],\n    [{"id": 3, "src": "p2"}, {"id": 4, "src": "p2"}, {"id": 5, "src": "p2"}],\n    [{"id": 5, "src": "p3"}, {"id": 6, "src": "p3"}],\n]\n\nseen = set()\nclean = []\nfor page in pages:\n    for rec in page:\n        if rec["id"] not in seen:\n            seen.add(rec["id"])\n            clean.append(rec)\nprint(len(clean))\nprint([r["id"] for r in clean])\nfor r in clean:\n    if r["id"] == 3:\n        print(r["src"])',
+    checks: [{type: 'output', expected: ['6', '[1, 2, 3, 4, 5, 6]', 'p1']}],
+    shapeQ: {question: 'Pages overlap. What are the dedupe key and the rule — decided before you code?', choices: ['Key = id, keep the first occurrence', 'Key = page number, keep the last page', 'No dedupe — pages never overlap', 'Key = src, keep any'], answer: 0, why: 'Boundary records repeat across pages. Id is the identity; keep-first preserves the earliest version and makes re-runs idempotent.'},
+    verdictQ: {question: 'Your prints: 6, [1, 2, 3, 4, 5, 6], p1. Which verdict is allowed?', choices: ['8 delivered records became 6 unique; 2 boundary duplicates dropped, first copies kept', 'The API sent exactly 6 records', 'Page 2 was entirely duplicates', 'src p1 records are more trustworthy'], answer: 0, why: 'You printed deliveries implicitly (3 pages), uniques (6), and proof of keep-first (p1 for id 3). That supports the dedupe verdict — and nothing about page 2 being all duplicates (it contributed id 4) or trust.'}
+  }
+}
+];
+if (typeof module !== 'undefined' && module.exports) module.exports = {DE_LESSONS};
+
+</script>
+<script>
+'use strict';
+/* Code Dojo engine v0.1 — tiny interpreters for a teaching subset of Python and Java.
+   Both parsers produce a common AST; one evaluator runs both.
+   API: runProgram(lang, code) -> { ok, output:[lines], error, globals:{} }
+   Supported (both): assignment, print, if/else, for, while, functions+return,
+   break/continue, arithmetic, comparison, boolean logic, indexing/slicing,
+   lists/arrays, string methods (small set). Everything else errors honestly. */
+
+function EngineError(msg){ this.message = msg; }
+EngineError.prototype = Object.create(Error.prototype);
+
+/* Python dict/set wrappers (preserve insertion order, support non-string keys) */
+function PyDict(){ this.entries = []; } // [[key, value], ...]
+PyDict.prototype.has = function(k){ return this.entries.some(e => deepEqVal(e[0], k)); };
+PyDict.prototype.get = function(k){ const e = this.entries.find(e => deepEqVal(e[0], k)); return e ? e[1] : undefined; };
+PyDict.prototype.set = function(k, v){ const e = this.entries.find(e => deepEqVal(e[0], k)); if (e) e[1] = v; else this.entries.push([k, v]); };
+function PySet(){ this.items = []; }
+PySet.prototype.has = function(v){ return this.items.some(x => deepEqVal(x, v)); };
+PySet.prototype.add = function(v){ if (!this.has(v)) this.items.push(v); };
+function deepEqVal(a, b){
+  if (a instanceof PyDict && b instanceof PyDict) return a.entries.length === b.entries.length && a.entries.every((e, i) => deepEqVal(e[0], b.entries[i][0]) && deepEqVal(e[1], b.entries[i][1]));
+  if (a instanceof PySet && b instanceof PySet) return a.items.length === b.items.length && a.items.every(x => b.has(x));
+  if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((x, i) => deepEqVal(x, b[i]));
+  return a === b;
+}
+function normalizeVal(v){
+  if (v instanceof PyDict){ const o = {}; v.entries.forEach(e => { o[String(e[0])] = normalizeVal(e[1]); }); return o; }
+  if (v instanceof PySet) return v.items.map(normalizeVal);
+  if (Array.isArray(v)) return v.map(normalizeVal);
+  return v;
+}
+function compareValues(a, b){
+  if (typeof a === 'number' && typeof b === 'number') return a - b;
+  if (typeof a === 'string' && typeof b === 'string') return a < b ? -1 : a > b ? 1 : 0;
+  if (typeof a === 'boolean' && typeof b === 'boolean') return a === b ? 0 : a ? 1 : -1;
+  if (Array.isArray(a) && Array.isArray(b)){
+    for (let i = 0; i < Math.min(a.length, b.length); i++){ const c = compareValues(a[i], b[i]); if (c) return c; }
+    return a.length - b.length;
+  }
+  if (a instanceof PyDict || b instanceof PyDict) throw new EngineError("Dicts are not comparable — sort by a computed number pulled out of the dict (e.g. key=lambda kv: kv[1]['fail'] / kv[1]['total']), not by the dict itself");
+  throw new EngineError('Values are not comparable for sorting');
+}
+
+/* ---------------- tokenizer (shared core) ---------------- */
+function tokenize(src, lang){
+  const toks = []; let i = 0;
+  const isDigit = c => c >= '0' && c <= '9';
+  const isName = c => /[A-Za-z_$]/.test(c);
+  while (i < src.length){
+    const c = src[i];
+    if (c === ' ' || c === '\t' || c === '\r'){ i++; continue; }
+    if (c === '\n'){ toks.push({t:'NL'}); i++; continue; }
+    if (lang === 'python' && c === '#'){ while (i < src.length && src[i] !== '\n') i++; continue; }
+    if (lang === 'java' && c === '/' && src[i+1] === '/'){ while (i < src.length && src[i] !== '\n') i++; continue; }
+    if (isDigit(c) || (c === '.' && isDigit(src[i+1] || ''))){
+      let j = i, dot = false;
+      while (j < src.length && (isDigit(src[j]) || (src[j] === '.' && !dot))){ if (src[j] === '.') dot = true; j++; }
+      toks.push({t:'NUM', v: parseFloat(src.slice(i, j)), raw: src.slice(i, j)}); i = j; continue;
+    }
+    if (c === 'f' && lang === 'python' && (src[i+1] === '"' || src[i+1] === "'")){
+      const q = src[i+1]; let j = i + 2, s = '';
+      while (j < src.length && src[j] !== q){ if (src[j] === '\\' && j+1 < src.length){ s += esc(src[j+1]); j += 2; } else { s += src[j]; j++; } }
+      if (j >= src.length) throw new EngineError('Unterminated f-string');
+      toks.push({t:'FSTR', v: s}); i = j + 1; continue;
+    }
+    if (c === '"' || c === "'"){
+      const q = c; let j = i + 1, s = '';
+      while (j < src.length && src[j] !== q){ if (src[j] === '\\' && j+1 < src.length){ s += esc(src[j+1]); j += 2; } else { s += src[j]; j++; } }
+      if (j >= src.length) throw new EngineError('Unterminated string');
+      toks.push({t:'STR', v: s}); i = j + 1; continue;
+    }
+    if (isName(c)){
+      let j = i; while (j < src.length && /[A-Za-z0-9_$]/.test(src[j])) j++;
+      toks.push({t:'NAME', v: src.slice(i, j)}); i = j; continue;
+    }
+    const three = src.slice(i, i+3), two = src.slice(i, i+2);
+    if (three === '**=' ){ toks.push({t:'OP', v:'**='}); i += 3; continue; }
+    if (['**','//','==','!=','<=','>=','&&','||','+=','-=','*=','/=','%=','++','--'].includes(two)){ toks.push({t:'OP', v:two}); i += 2; continue; }
+    if ('+-*/%()[]{},:;.=<>!'.includes(c)){ toks.push({t:'OP', v:c}); i++; continue; }
+    throw new EngineError('Unexpected character: ' + c);
+  }
+  toks.push({t:'EOF'});
+  return toks;
+}
+function esc(c){ return c === 'n' ? '\n' : c === 't' ? '\t' : c; }
+
+/* ---------------- expression parser (Pratt, shared) ---------------- */
+function ExprParser(toks, lang, pos){
+  this.toks = toks; this.lang = lang; this.pos = pos || 0;
+}
+ExprParser.prototype.peek = function(){ return this.toks[this.pos]; };
+ExprParser.prototype.next = function(){ return this.toks[this.pos++]; };
+ExprParser.prototype.atOp = function(v){ const p = this.peek(); return p.t === 'OP' && p.v === v; };
+ExprParser.prototype.eatOp = function(v){ if (this.atOp(v)){ this.pos++; return true; } return false; };
+ExprParser.prototype.expectOp = function(v){ if (!this.eatOp(v)) throw new EngineError('Expected "' + v + '"'); };
+
+ExprParser.prototype.parse = function(){
+  if (this.lang === 'python' && this.peek().t === 'NAME' && this.peek().v === 'lambda'){
+    this.next();
+    const params = [];
+    while (!(this.peek().t === 'OP' && this.peek().v === ':')){ const p = this.next(); if (p.t === 'NAME') params.push(p.v); }
+    this.next(); // ':'
+    return {k:'Lambda', params, body: this.parse()};
+  }
+  let e = this.parseOr();
+  if (this.lang === 'python' && this.peek().t === 'NAME' && this.peek().v === 'if'){
+    this.next(); const cond = this.parseOr();
+    const elseTok = this.next();
+    if (!(elseTok.t === 'NAME' && elseTok.v === 'else')) throw new EngineError('Expected "else" in conditional expression');
+    const els = this.parse();
+    return {k:'Ternary', e, cond, els};
+  }
+  return e;
+};
+ExprParser.prototype.parseOr = function(){
+  let l = this.parseAnd();
+  while ((this.lang === 'python' && this.peek().t === 'NAME' && this.peek().v === 'or') || this.atOp('||')){
+    this.next(); const r = this.parseAnd(); l = {k:'Bool', op:'or', l, r};
+  }
+  return l;
+};
+ExprParser.prototype.parseAnd = function(){
+  let l = this.parseNot();
+  while ((this.lang === 'python' && this.peek().t === 'NAME' && this.peek().v === 'and') || this.atOp('&&')){
+    this.next(); const r = this.parseNot(); l = {k:'Bool', op:'and', l, r};
+  }
+  return l;
+};
+ExprParser.prototype.parseNot = function(){
+  const p = this.peek();
+  if ((this.lang === 'python' && p.t === 'NAME' && p.v === 'not') || (this.lang === 'java' && p.t === 'OP' && p.v === '!')){
+    this.next(); return {k:'Not', e: this.parseNot()};
+  }
+  return this.parseCompare();
+};
+ExprParser.prototype.parseCompare = function(){
+  let l = this.parseAdd();
+  for (;;){
+    const p = this.peek();
+    let op = null;
+    if (p.t === 'OP' && ['==','!=','<','>','<=','>='].includes(p.v)) op = p.v;
+    if (this.lang === 'python' && p.t === 'NAME' && p.v === 'in') op = 'in';
+    if (this.lang === 'python' && p.t === 'NAME' && p.v === 'not'){
+      const n1 = this.toks[this.pos + 1];
+      if (n1 && n1.t === 'NAME' && n1.v === 'in'){ this.next(); op = 'notin'; }
+    }
+    if (this.lang === 'python' && p.t === 'NAME' && p.v === 'is'){
+      const n1 = this.toks[this.pos + 1];
+      if (n1 && n1.t === 'NAME' && n1.v === 'not'){ this.next(); op = 'isnot'; }
+      else op = 'is';
+    }
+    if (!op) break;
+    this.next(); const r = this.parseAdd(); l = {k:'Cmp', op, l, r};
+  }
+  return l;
+};
+ExprParser.prototype.parseAdd = function(){
+  let l = this.parseMul();
+  while (this.atOp('+') || this.atOp('-')){ const op = this.next().v; const r = this.parseMul(); l = {k:'Bin', op, l, r}; }
+  return l;
+};
+ExprParser.prototype.parseMul = function(){
+  let l = this.parseUnary();
+  while (this.atOp('*') || this.atOp('/') || this.atOp('%') || this.atOp('//')){ const op = this.next().v; const r = this.parseUnary(); l = {k:'Bin', op, l, r}; }
+  return l;
+};
+ExprParser.prototype.parseUnary = function(){
+  if (this.atOp('-')){ this.next(); return {k:'Neg', e: this.parseUnary()}; }
+  if (this.atOp('+')){ this.next(); return this.parseUnary(); }
+  if (this.atOp('++')){ this.next(); const e = this.parseUnary(); if (e.k !== 'Var') throw new EngineError('++ needs a variable'); return {k:'PreInc', name: e.name}; }
+  if (this.atOp('--')){ this.next(); const e = this.parseUnary(); if (e.k !== 'Var') throw new EngineError('-- needs a variable'); return {k:'PreDec', name: e.name}; }
+  return this.parsePow();
+};
+ExprParser.prototype.parsePow = function(){
+  let l = this.parsePostfix();
+  if (this.atOp('**')){ this.next(); const r = this.parseUnary(); l = {k:'Bin', op:'**', l, r}; }
+  return l;
+};
+ExprParser.prototype.parsePostfix = function(){
+  let e = this.parseAtom();
+  for (;;){
+    if (this.atOp('(')){
+      this.next(); const args = []; const kwargs = {};
+      if (!this.atOp(')')){
+        do {
+          const t0 = this.toks[this.pos], t1 = this.toks[this.pos + 1];
+          if (this.lang === 'python' && t0 && t0.t === 'NAME' && t1 && t1.t === 'OP' && t1.v === '='){
+            const kwName = t0.v; this.pos += 2; kwargs[kwName] = this.parse();
+          } else args.push(this.parse());
+        } while (this.eatOp(','));
+      }
+      this.expectOp(')'); e = {k:'Call', fn: e, args, kwargs}; continue;
+    }
+    if (this.atOp('[')){
+      this.next();
+      let a = null, b = null, isSlice = false;
+      if (!this.atOp(':') && !this.atOp(']')) a = this.parse();
+      if (this.eatOp(':')){ isSlice = true; if (!this.atOp(']')) b = this.parse(); }
+      this.expectOp(']');
+      e = isSlice ? {k:'Slice', obj: e, a, b} : {k:'Index', obj: e, idx: a};
+      continue;
+    }
+    if (this.atOp('.')){
+      this.next(); const nameTok = this.next();
+      if (nameTok.t !== 'NAME') throw new EngineError('Expected a name after .');
+      if (e.k === 'Var' && ['System','Math','Integer','Double'].includes(e.name.split('.')[0])) e = {k:'Var', name: e.name + '.' + nameTok.v}; // dotted builtins: System.out.println, Math.max
+      else e = {k:'Attr', obj: e, name: nameTok.v};
+      continue;
+    }
+    if (this.lang === 'java' && this.atOp('++')){ this.next(); if (e.k !== 'Var') throw new EngineError('++ needs a variable'); e = {k:'PostInc', name: e.name}; continue; }
+    if (this.lang === 'java' && this.atOp('--')){ this.next(); if (e.k !== 'Var') throw new EngineError('-- needs a variable'); e = {k:'PostDec', name: e.name}; continue; }
+    break;
+  }
+  return e;
+};
+ExprParser.prototype.parseAtom = function(){
+  const p = this.next();
+  if (!p) throw new EngineError('Unexpected end of code');
+  if (p.t === 'NUM') return {k:'Num', v: p.v, isFloat: !!(p.raw && p.raw.indexOf('.') >= 0)};
+  if (p.t === 'STR') return {k:'Str', v: p.v};
+  if (p.t === 'FSTR') return {k:'FStr', v: p.v};
+  if (p.t === 'NAME'){
+    if (p.v === 'True' || p.v === 'true') return {k:'BoolLit', v: true};
+    if (p.v === 'False' || p.v === 'false') return {k:'BoolLit', v: false};
+    if (p.v === 'None' || p.v === 'null') return {k:'Null'};
+    return {k:'Var', name: p.v};
+  }
+  if (p.t === 'OP' && p.v === '('){ const e = this.parse(); this.expectOp(')'); return e; }
+  if (p.t === 'OP' && p.v === '['){
+    if (this.atOp(']')){ this.next(); return {k:'ListLit', items: []}; }
+    const first = this.parse();
+    if (this.lang === 'python' && this.peek().t === 'NAME' && this.peek().v === 'for'){
+      this.next(); // 'for'
+      const targets = [];
+      while (!(this.peek().t === 'NAME' && this.peek().v === 'in')){
+        const tk = this.next(); if (tk.t === 'NAME') targets.push(tk.v);
+      }
+      this.next(); // 'in'
+      const iter = this.parseOr();
+      let cond = null;
+      if (this.peek().t === 'NAME' && this.peek().v === 'if'){ this.next(); cond = this.parseOr(); }
+      this.expectOp(']');
+      return {k:'ListComp', elt: first, targets, iter, cond};
+    }
+    const items = [first];
+    while (this.eatOp(',')){ if (this.atOp(']')) break; items.push(this.parse()); }
+    this.expectOp(']'); return {k:'ListLit', items};
+  }
+  if (p.t === 'OP' && p.v === '{'){
+    if (this.lang === 'java'){ // Java array literal
+      const items = [];
+      if (!this.atOp('}')){ do { items.push(this.parse()); } while (this.eatOp(',')); }
+      this.expectOp('}'); return {k:'ListLit', items};
+    }
+    // Python dict / set literal
+    if (this.atOp('}')){ this.next(); return {k:'DictLit', entries: []}; }
+    const first = this.parse();
+    if (this.eatOp(':')){
+      const entries = [[first, this.parse()]];
+      while (this.eatOp(',')){ if (this.atOp('}')) break; const k = this.parse(); this.expectOp(':'); entries.push([k, this.parse()]); }
+      this.expectOp('}'); return {k:'DictLit', entries};
+    }
+    const items = [first];
+    while (this.eatOp(',')){ if (this.atOp('}')) break; items.push(this.parse()); }
+    this.expectOp('}'); return {k:'SetLit', items};
+  }
+  throw new EngineError('Unexpected token in expression: ' + (p.v || p.t));
+};
+function parseExprFromString(str, lang){
+  const toks = tokenize(str, lang).filter(t => t.t !== 'NL');
+  const ep = new ExprParser(toks, lang);
+  const e = ep.parse();
+  if (ep.peek().t !== 'EOF') throw new EngineError('Could not parse the rest of: "' + str + '"');
+  return e;
+}
+
+/* ---------------- Python parser (indentation blocks) ---------------- */
+function bracketDelta(text){
+  let inS = null, depth = 0;
+  for (let i = 0; i < text.length; i++){
+    const ch = text[i];
+    if (inS){ if (ch === '\\') i++; else if (ch === inS) inS = null; }
+    else if (ch === '"' || ch === "'") inS = ch;
+    else if (ch === '#') break;
+    else if (ch === '[' || ch === '{' || ch === '(') depth++;
+    else if (ch === ']' || ch === '}' || ch === ')') depth--;
+  }
+  return depth;
+}
+function joinContinuations(src){
+  // Merge physical lines while brackets are open, so multi-line list/dict
+  // literals parse as one logical line. Returns [{raw, line}] with the line
+  // number of the FIRST physical line (keeps step-highlight numbers stable
+  // for single-line code).
+  const physical = src.replace(/\t/g, '    ').split('\n');
+  const out = [];
+  let buf = null, depth = 0;
+  physical.forEach((raw, idx) => {
+    if (buf === null){ buf = {raw, line: idx + 1}; depth = bracketDelta(raw); }
+    else { buf.raw += ' ' + raw.trim(); depth += bracketDelta(raw); }
+    if (depth <= 0){ out.push(buf); buf = null; depth = 0; }
+  });
+  if (buf !== null) out.push(buf);
+  return out;
+}
+function pyLines(src){
+  const out = [];
+  joinContinuations(src).forEach(({raw, line}) => {
+    const idx = line - 1;
+    // strip comments outside strings
+    let inS = null, cut = raw.length;
+    for (let i = 0; i < raw.length; i++){
+      const ch = raw[i];
+      if (inS){ if (ch === inS) inS = null; }
+      else if (ch === '"' || ch === "'") inS = ch;
+      else if (ch === '#'){ cut = i; break; }
+    }
+    const text = raw.slice(0, cut).replace(/\s+$/, '');
+    if (!text.trim()) return;
+    const indent = text.length - text.replace(/^ +/, '').length;
+    out.push({indent, text: text.trim(), line: idx + 1});
+  });
+  return out;
+}
+function parsePython(src){
+  const lines = pyLines(src);
+  let pos = 0;
+  function parseBlock(indent){
+    const stmts = [];
+    while (pos < lines.length && lines[pos].indent === indent){
+      stmts.push(parseStmt(indent));
+    }
+    if (pos < lines.length && lines[pos].indent > indent) throw new EngineError('Unexpected indent on line ' + lines[pos].line);
+    return stmts;
+  }
+  function childBlock(parentIndent){
+    if (pos >= lines.length || lines[pos].indent <= parentIndent) throw new EngineError('Expected an indented block');
+    return parseBlock(lines[pos].indent);
+  }
+  function expr(str){ return parseExprFromString(str, 'python'); }
+  function parseStmt(indent){
+    const L = lines[pos]; const t = L.text;
+    let m;
+    if ((m = t.match(/^def\s+([A-Za-z_]\w*)\s*\(([^)]*)\)\s*:$/))){
+      pos++;
+      const params = m[2].trim() ? m[2].split(',').map(s => s.trim().split('=')[0].trim()) : [];
+      const body = childBlock(indent);
+      return {k:'FuncDef', name: m[1], params, body};
+    }
+    if ((m = t.match(/^if\s+(.+):$/))){
+      pos++;
+      const branches = [{cond: expr(m[1]), body: childBlock(indent)}];
+      let elseBody = null;
+      while (pos < lines.length && lines[pos].indent === indent && /^elif\s+/.test(lines[pos].text)){
+        const mm = lines[pos].text.match(/^elif\s+(.+):$/); pos++;
+        branches.push({cond: expr(mm[1]), body: childBlock(indent)});
+      }
+      if (pos < lines.length && lines[pos].indent === indent && lines[pos].text === 'else:'){
+        pos++; elseBody = childBlock(indent);
+      }
+      return {k:'If', branches, elseBody};
+    }
+    if ((m = t.match(/^while\s+(.+):$/))){
+      pos++; return {k:'While', cond: expr(m[1]), body: childBlock(indent)};
+    }
+    if ((m = t.match(/^for\s+(.+?)\s+in\s+(.+):$/))){
+      pos++;
+      const targets = m[1].split(',').map(s => s.trim()).filter(Boolean);
+      return {k:'ForIn', targets, iter: expr(m[2]), body: childBlock(indent)};
+    }
+    if (t === 'else:' || t.startsWith('elif ')) throw new EngineError('"' + t.split(':')[0] + '" without a matching if (line ' + L.line + ')');
+    pos++;
+    if (t === 'break') return {k:'Break'};
+    if (t === 'continue') return {k:'Continue'};
+    if (t === 'pass') return {k:'Pass'};
+    if ((m = t.match(/^return(\s+(.+))?$/))) return {k:'Return', e: m[2] ? expr(m[2]) : null};
+    if ((m = t.match(/^([A-Za-z_]\w*(?:\[[^\]]+\])+)\s*(\+=|-=|\*=|\/=|%=)\s*(.+)$/))) return {k:'TargetAugAssign', target: expr(m[1]), op: m[2][0], e: expr(m[3])};
+    if ((m = t.match(/^([A-Za-z_]\w*(?:\[[^\]]+\])+)\s*=(?!=)\s*(.+)$/))) return {k:'TargetAssign', target: expr(m[1]), e: expr(m[2])};
+    if ((m = t.match(/^([A-Za-z_]\w*)\s*(\+=|-=|\*=|\/=|%=)\s*(.+)$/))) return {k:'AugAssign', name: m[1], op: m[2][0], e: expr(m[3])};
+    if ((m = t.match(/^([A-Za-z_]\w*)\s*=(?!=)\s*(.+)$/))) return {k:'Assign', name: m[1], e: expr(m[2])};
+    if ((m = t.match(/^([A-Za-z_]\w*)\[(.+)\]\s*=(?!=)\s*(.+)$/))) return {k:'IndexAssign', name: m[1], idx: expr(m[2]), e: expr(m[3])};
+    return {k:'ExprStmt', e: expr(t)};
+  }
+  const prog = parseBlock(lines.length ? lines[0].indent : 0);
+  if (pos < lines.length) throw new EngineError('Could not parse line ' + lines[pos].line + ': ' + lines[pos].text);
+  return prog;
+}
+
+/* ---------------- Java parser (token stream) ---------------- */
+const JAVA_TYPES = ['int','double','String','boolean','long','float','char','var'];
+let JAVA_HAS_MAIN_WRAPPER = false;
+function parseJava(src){
+  JAVA_HAS_MAIN_WRAPPER = false;
+  const toks = tokenize(src, 'java').filter(t => t.t !== 'NL');
+  let pos = 0;
+  const peek = (n) => toks[pos + (n || 0)] || {t:'EOF'};
+  const next = () => toks[pos++];
+  const atOp = v => peek().t === 'OP' && peek().v === v;
+  const eatOp = v => { if (atOp(v)){ pos++; return true; } return false; };
+  const expectOp = v => { if (!eatOp(v)) throw new EngineError('Expected "' + v + '" in Java code, found "' + (peek().v || peek().t) + '"'); };
+  const atName = v => peek().t === 'NAME' && (v === undefined || peek().v === v);
+  function exprParser(){ return new ExprParser(toks, 'java', pos); }
+  function parseExpr(){ const ep = exprParser(); const e = ep.parse(); pos = ep.pos; return e; }
+
+  function isMethodDef(){
+    let i = pos;
+    while (toks[i] && toks[i].t === 'NAME' && ['public','private','static','final'].includes(toks[i].v)) i++;
+    if (!toks[i] || toks[i].t !== 'NAME') return false;
+    // type (may be array or void)
+    if (!(JAVA_TYPES.includes(toks[i].v) || toks[i].v === 'void' || /^[A-Z]/.test(toks[i].v))) return false;
+    i++;
+    if (toks[i] && toks[i].t === 'OP' && toks[i].v === '['){ i += 2; } // []
+    if (!toks[i] || toks[i].t !== 'NAME') return false;
+    i++;
+    return toks[i] && toks[i].t === 'OP' && toks[i].v === '(';
+  }
+  function parseMethodDef(){
+    while (atName('public') || atName('private') || atName('static') || atName('final')) next();
+    next(); // return type
+    if (eatOp('[')) expectOp(']');
+    const name = next().v;
+    expectOp('(');
+    const params = []; const paramTypes = [];
+    if (!atOp(')')){
+      do {
+        paramTypes.push(next().v); // param type
+        if (eatOp('[')) expectOp(']');
+        params.push(next().v);
+      } while (eatOp(','));
+    }
+    expectOp(')');
+    const body = parseBlock();
+    return {k:'FuncDef', name, params, paramTypes, body};
+  }
+  function parseBlock(){
+    expectOp('{');
+    const stmts = [];
+    while (!atOp('}')){
+      if (peek().t === 'EOF') throw new EngineError('Missing closing }');
+      stmts.push(parseStmt());
+    }
+    expectOp('}');
+    return stmts;
+  }
+  function parseBody(){ return atOp('{') ? parseBlock() : [parseStmt()]; }
+  function parseStmt(){
+    if (atOp('{')) return {k:'Block', body: parseBlock()};
+    if (isMethodDef()) return parseMethodDef();
+    if (atName('if')){
+      next(); expectOp('('); const cond = parseExpr(); expectOp(')');
+      const branches = [{cond, body: parseBody()}];
+      let elseBody = null;
+      while (atName('else')){
+        next();
+        if (atName('if')){ next(); expectOp('('); const c2 = parseExpr(); expectOp(')'); branches.push({cond: c2, body: parseBody()}); }
+        else { elseBody = parseBody(); break; }
+      }
+      return {k:'If', branches, elseBody};
+    }
+    if (atName('while')){
+      next(); expectOp('('); const cond = parseExpr(); expectOp(')');
+      return {k:'While', cond, body: parseBody()};
+    }
+    if (atName('for')){
+      next(); expectOp('(');
+      let init = null;
+      if (!atOp(';')){
+        if (isVarDecl()) init = parseVarDecl(true);
+        else init = parseSimple();
+      }
+      expectOp(';');
+      // for-each: Type name : expr
+      if (init && init.k === 'VarDecl' && init.e === null && peek().t === 'OP' && peek().v === ':'){
+        next(); const iter = parseExpr(); expectOp(')');
+        return {k:'ForIn', name: init.name, iter, body: parseBody()};
+      }
+      const cond = atOp(';') ? {k:'BoolLit', v:true} : parseExpr();
+      expectOp(';');
+      const updates = [];
+      if (!atOp(')')){ do { updates.push(parseSimple()); } while (eatOp(',')); }
+      expectOp(')');
+      return {k:'ForClassic', init, cond, updates, body: parseBody()};
+    }
+    if (atName('return')){ next(); const e = atOp(';') ? null : parseExpr(); expectOp(';'); return {k:'Return', e}; }
+    if (atName('break')){ next(); expectOp(';'); return {k:'Break'}; }
+    if (atName('continue')){ next(); expectOp(';'); return {k:'Continue'}; }
+    if (isVarDecl()){ const d = parseVarDecl(false); expectOp(';'); return d; }
+    const s = parseSimple(); expectOp(';'); return s;
+  }
+  function isVarDecl(){
+    const p = peek();
+    if (p.t !== 'NAME') return false;
+    if (!(JAVA_TYPES.includes(p.v) || /^[A-Z]/.test(p.v))) return false;
+    let i = pos + 1;
+    if (toks[i] && toks[i].t === 'OP' && toks[i].v === '[') i += 2;
+    return toks[i] && toks[i].t === 'NAME' && toks[i + 1] && !(toks[i + 1].t === 'OP' && toks[i + 1].v === '(');
+  }
+  function parseVarDecl(inFor){
+    const typeTok = next(); // type
+    if (eatOp('[')) expectOp(']');
+    const nameTok = next();
+    if (nameTok.t !== 'NAME') throw new EngineError('Expected a variable name');
+    let e = null;
+    if (eatOp('=')) e = parseExpr();
+    return {k:'VarDecl', name: nameTok.v, e, type: typeTok.v};
+  }
+  function parseSimple(){
+    // assignment / augassign / expr statement (no trailing ;)
+    const save = pos;
+    if (peek().t === 'NAME' && !peek().v.includes('.')){
+      const name = peek().v; const p1 = peek(1);
+      if (p1.t === 'OP' && p1.v === '='){ pos += 2; return {k:'Assign', name, e: parseExpr()}; }
+      if (p1.t === 'OP' && ['+=','-=','*=','/=','%='].includes(p1.v)){ pos += 2; return {k:'AugAssign', name, op: p1.v[0], e: parseExpr()}; }
+      if (p1.t === 'OP' && p1.v === '['){
+        // possible index assign: try scan for ] then =
+        let depth = 0, i = pos + 1;
+        while (toks[i]){ if (toks[i].t === 'OP' && toks[i].v === '[') depth++; if (toks[i].t === 'OP' && toks[i].v === ']'){ depth--; if (!depth){ i++; break; } } i++; }
+        if (toks[i] && toks[i].t === 'OP' && toks[i].v === '='){
+          pos += 2; const idx = parseExpr(); expectOp(']'); expectOp('='); return {k:'IndexAssign', name, idx, e: parseExpr()};
+        }
+      }
+    }
+    pos = save;
+    return {k:'ExprStmt', e: parseExpr()};
+  }
+  const prog = [];
+  while (peek().t !== 'EOF'){
+    // skip a class wrapper if the student pasted one: class X { ...stmts... }
+    if (atName('class') || (atName('public') && peek(1).v === 'class')){
+      JAVA_HAS_MAIN_WRAPPER = true;
+      while (!atOp('{')) next();
+      next();
+      while (!atOp('}')) prog.push(parseStmt());
+      expectOp('}');
+      continue;
+    }
+    prog.push(parseStmt());
+  }
+  return prog;
+}
+
+/* ---------------- evaluator ---------------- */
+function ReturnSignal(v){ this.v = v; }
+function BreakSignal(){} function ContinueSignal(){}
+
+function stringify(v, lang, nested){
+  if (v === null || v === undefined) return lang === 'python' ? 'None' : 'null';
+  if (v === true) return lang === 'python' ? 'True' : 'true';
+  if (v === false) return lang === 'python' ? 'False' : 'false';
+  if (typeof v === 'string' && nested && lang === 'python') return "'" + v + "'";
+  if (Array.isArray(v)) return '[' + v.map(x => stringify(x, lang, true)).join(', ') + ']';
+  if (v instanceof PyDict) return '{' + v.entries.map(e => stringifyKey(e[0], lang) + ': ' + stringify(e[1], lang, true)).join(', ') + '}';
+  if (v instanceof PySet) return v.items.length ? '{' + v.items.map(x => stringify(x, lang, true)).join(', ') + '}' : 'set()';
+  if (typeof v === 'number'){ return String(v); }
+  return String(v);
+}
+function stringifyKey(k, lang){
+  if (typeof k === 'string') return "'" + k + "'";
+  return stringify(k, lang);
+}
+function truthy(v){
+  if (v instanceof PySet) return v.items.length > 0;
+  if (v instanceof PyDict) return v.entries.length > 0;
+  return !!v;
+}
+
+function makeEnv(parent){ return {vars: {}, parent: parent || null}; }
+function envGet(env, name){
+  let e = env;
+  while (e){ if (name in e.vars) return e.vars[name]; e = e.parent; }
+  throw new EngineError('Name "' + name + '" is not defined — did you create it first?');
+}
+function envSet(env, name, v){ env.vars[name] = v; }
+
+function runProgram(lang, code){
+  const ctx = {lang, output: [], steps: 0, funcs: {}, maxSteps: 20000, javaTypes: {}};
+  try {
+    const prog = lang === 'python' ? parsePython(code) : parseJava(code);
+    const global = makeEnv(null);
+    ctx.globalEnv = global;
+    execBlock(prog, global, ctx, true);
+    if (lang === 'java' && JAVA_HAS_MAIN_WRAPPER && ctx.funcs['main']){
+      const def = ctx.funcs['main'];
+      const local = makeEnv(global);
+      def.params.forEach(p => envSet(local, p, []));
+      try { execBlock(def.body, local, ctx, false); } catch (sig){ if (!(sig instanceof ReturnSignal)) throw sig; }
+    }
+    const globals = {};
+    Object.keys(global.vars).forEach(k => { const v = global.vars[k]; if (v && typeof v === 'object' && v.__fn) return; globals[k] = normalizeVal(v); });
+    return {ok: true, output: ctx.output, error: null, globals};
+  } catch (e){
+    if (e instanceof ReturnSignal) return {ok: true, output: ctx.output, error: null, globals: {}};
+    return {ok: false, output: ctx.output, error: e.message || String(e), globals: {}};
+  }
+}
+function tick(ctx){ ctx.steps++; if (ctx.steps > ctx.maxSteps) throw new EngineError('Step limit hit — looks like an infinite loop. Check your loop condition.'); }
+
+function execBlock(stmts, env, ctx, isGlobal){
+  for (const s of stmts) execStmt(s, env, ctx, isGlobal);
+}
+function execStmt(s, env, ctx, isGlobal){
+  tick(ctx);
+  switch (s.k){
+    case 'Pass': return;
+    case 'Block': execBlock(s.body, env, ctx, false); return;
+    case 'FuncDef': ctx.funcs[s.name] = s; if (isGlobal) envSet(env, s.name, {__fn: s.name}); return;
+    case 'VarDecl': if (ctx.lang === 'java' && s.type) ctx.javaTypes[s.name] = s.type; envSet(env, s.name, s.e ? evalExpr(s.e, env, ctx) : null); return;
+    case 'Assign': envSet(env, s.name, s.e ? evalExpr(s.e, env, ctx) : null); return;
+    case 'AugAssign': {
+      const cur = envGet(env, s.name); const v = evalExpr(s.e, env, ctx);
+      envSet(env, s.name, applyBin(s.op, cur, v, ctx)); return;
+    }
+    case 'IndexAssign': {
+      const arr = envGet(env, s.name); const idx = evalExpr(s.idx, env, ctx);
+      if (arr instanceof PyDict){ arr.set(idx, evalExpr(s.e, env, ctx)); return; }
+      if (!Array.isArray(arr) && typeof arr !== 'string') throw new EngineError('"' + s.name + '" is not a list/dict you can index');
+      if (Array.isArray(arr)) arr[ normIdx(idx, arr.length) ] = evalExpr(s.e, env, ctx);
+      return;
+    }
+    case 'TargetAssign': {
+      const {container, key} = targetSlot(s.target, env, ctx);
+      setSlot(container, key, evalExpr(s.e, env, ctx));
+      return;
+    }
+    case 'TargetAugAssign': {
+      const {container, key} = targetSlot(s.target, env, ctx);
+      setSlot(container, key, applyBin(s.op, getSlot(container, key, ctx), evalExpr(s.e, env, ctx), ctx));
+      return;
+    }
+    case 'ExprStmt': evalExpr(s.e, env, ctx); return;
+    case 'Return': throw new ReturnSignal(s.e ? evalExpr(s.e, env, ctx) : null);
+    case 'Break': throw new BreakSignal();
+    case 'Continue': throw new ContinueSignal();
+    case 'If': {
+      for (const b of s.branches){ if (truthy(evalExpr(b.cond, env, ctx))){ execBlock(b.body, env, ctx, false); return; } }
+      if (s.elseBody) execBlock(s.elseBody, env, ctx, false);
+      return;
+    }
+    case 'While': {
+      while (truthy(evalExpr(s.cond, env, ctx))){
+        tick(ctx);
+        try { execBlock(s.body, env, ctx, false); }
+        catch (e){ if (e instanceof BreakSignal) break; if (e instanceof ContinueSignal) continue; throw e; }
+      }
+      return;
+    }
+    case 'ForIn': {
+      const it = evalExpr(s.iter, env, ctx);
+      const items = toIterable(it);
+      const targets = s.targets || [s.name];
+      for (const item of items){
+        tick(ctx);
+        if (targets.length === 1) envSet(env, targets[0], item);
+        else {
+          if (!Array.isArray(item)) throw new EngineError('Cannot unpack a non-pair value in the for loop');
+          targets.forEach((tg, i) => envSet(env, tg, item[i]));
+        }
+        try { execBlock(s.body, env, ctx, false); }
+        catch (e){ if (e instanceof BreakSignal) break; if (e instanceof ContinueSignal) continue; throw e; }
+      }
+      return;
+    }
+    case 'ForClassic': {
+      if (s.init) execStmt(s.init, env, ctx, false);
+      while (truthy(evalExpr(s.cond, env, ctx))){
+        tick(ctx);
+        try { execBlock(s.body, env, ctx, false); }
+        catch (e){ if (e instanceof BreakSignal) break; if (e instanceof ContinueSignal){ s.updates.forEach(u => execStmt(u, env, ctx, false)); continue; } throw e; }
+        s.updates.forEach(u => execStmt(u, env, ctx, false));
+      }
+      return;
+    }
+  }
+  throw new EngineError('Unsupported statement: ' + s.k);
+}
+function normIdx(idx, len){ const i = idx < 0 ? len + idx : idx; if (i < 0 || i >= len) throw new EngineError('Index ' + idx + ' is out of range (length ' + len + ')'); return i; }
+function targetSlot(target, env, ctx){
+  if (target.k !== 'Index') throw new EngineError('That assignment target is not supported');
+  const container = evalExpr(target.obj, env, ctx);
+  const key = evalExpr(target.idx, env, ctx);
+  return {container, key};
+}
+function getSlot(container, key, ctx){
+  if (container instanceof PyDict){ const v = container.get(key); if (v === undefined) throw new EngineError('KeyError: ' + stringify(key, ctx.lang)); return v; }
+  if (Array.isArray(container) || typeof container === 'string') return container[normIdx(key, container.length)];
+  throw new EngineError('That value cannot be indexed');
+}
+function setSlot(container, key, v){
+  if (container instanceof PyDict){ container.set(key, v); return; }
+  if (Array.isArray(container)){ container[normIdx(key, container.length)] = v; return; }
+  throw new EngineError('That value does not support item assignment');
+}
+function toIterable(v){
+  if (typeof v === 'string') return v.split('');
+  if (Array.isArray(v)) return v;
+  if (v instanceof PyDict) return v.entries.map(e => e[0]);
+  if (v instanceof PySet) return v.items.slice();
+  throw new EngineError('That value is not iterable (not a list/string/dict/set/range)');
+}
+function callLambda(fn, vals, ctx){
+  const local = makeEnv(fn.env || ctx.globalEnv || null);
+  fn.params.forEach((p, i) => envSet(local, p, vals[i]));
+  return evalExpr(fn.body, local, ctx);
+}
+
+function applyBin(op, l, r, ctx){
+  const lang = ctx.lang;
+  if (op === '+'){
+    if (typeof l === 'string' || typeof r === 'string'){
+      if (Array.isArray(l) || Array.isArray(r)) throw new EngineError('Cannot add a string and a list');
+      return stringify(l, lang) + stringify(r, lang);
+    }
+    if (Array.isArray(l) && Array.isArray(r)) return l.concat(r);
+    return l + r;
+  }
+  if (op === '-') return l - r;
+  if (op === '*'){
+    if (typeof l === 'string' && typeof r === 'number') return l.repeat(Math.max(0, r));
+    if (typeof r === 'string' && typeof l === 'number') return r.repeat(Math.max(0, l));
+    return l * r;
+  }
+  if (op === '/'){
+    if (r === 0) throw new EngineError('Division by zero');
+    if (lang === 'java' && Number.isInteger(l) && Number.isInteger(r)) return Math.trunc(l / r);
+    return l / r;
+  }
+  if (op === '//'){ if (r === 0) throw new EngineError('Division by zero'); return Math.floor(l / r); }
+  if (op === '%'){ if (r === 0) throw new EngineError('Modulo by zero'); return ((l % r) + r) % r; }
+  if (op === '**') return Math.pow(l, r);
+  throw new EngineError('Unsupported operator ' + op);
+}
+function exprIsFloat(e, ctx){
+  if (!e) return false;
+  switch (e.k){
+    case 'Num': return !!e.isFloat;
+    case 'Var': return ctx.javaTypes[e.name] === 'double' || ctx.javaTypes[e.name] === 'float';
+    case 'Bin': case 'Cmp': return exprIsFloat(e.l, ctx) || exprIsFloat(e.r, ctx);
+    case 'Neg': case 'Not': return exprIsFloat(e.e, ctx);
+    case 'Call': return e.fn && e.fn.k === 'Var' && e.fn.name === 'Double.parseDouble';
+    case 'Index': return exprIsFloat(e.obj, ctx);
+    default: return false;
+  }
+}
+function deepEq(a, b){ return deepEqVal(a, b); }
+function evalExpr(e, env, ctx){
+  switch (e.k){
+    case 'Num': case 'Str': case 'BoolLit': return e.v;
+    case 'Null': return null;
+    case 'FStr': {
+      return e.v.replace(/\{([^{}]+)\}/g, (m, inner) => {
+        try { return stringify(evalExpr(parseExprFromString(inner, 'python'), env, ctx), 'python'); }
+        catch (err){ throw new EngineError('In f-string: ' + err.message); }
+      });
+    }
+    case 'Var': {
+      if (e.name.includes('.')) throw new EngineError('"' + e.name + '" is not supported here');
+      return envGet(env, e.name);
+    }
+    case 'ListLit': return e.items.map(x => evalExpr(x, env, ctx));
+    case 'DictLit': { const d = new PyDict(); e.entries.forEach(([k, v]) => d.set(evalExpr(k, env, ctx), evalExpr(v, env, ctx))); return d; }
+    case 'SetLit': { const s = new PySet(); e.items.forEach(x => s.add(evalExpr(x, env, ctx))); return s; }
+    case 'Lambda': return {__lambda: true, params: e.params, body: e.body, env};
+    case 'Ternary': return truthy(evalExpr(e.cond, env, ctx)) ? evalExpr(e.e, env, ctx) : evalExpr(e.els, env, ctx);
+    case 'ListComp': {
+      const items = toIterable(evalExpr(e.iter, env, ctx));
+      const out = [];
+      const local = makeEnv(env);
+      for (const item of items){
+        if (e.targets.length === 1) envSet(local, e.targets[0], item);
+        else { if (!Array.isArray(item)) throw new EngineError('Cannot unpack in comprehension'); e.targets.forEach((tg, i) => envSet(local, tg, item[i])); }
+        if (e.cond && !truthy(evalExpr(e.cond, local, ctx))) continue;
+        out.push(evalExpr(e.elt, local, ctx));
+      }
+      return out;
+    }
+    case 'Neg': return -evalExpr(e.e, env, ctx);
+    case 'Not': return !truthy(evalExpr(e.e, env, ctx));
+    case 'PreInc': { const v = envGet(env, e.name) + 1; envSet(env, e.name, v); return v; }
+    case 'PreDec': { const v = envGet(env, e.name) - 1; envSet(env, e.name, v); return v; }
+    case 'PostInc': { const v = envGet(env, e.name); envSet(env, e.name, v + 1); return v; }
+    case 'PostDec': { const v = envGet(env, e.name); envSet(env, e.name, v - 1); return v; }
+    case 'Bin': {
+      const lv = evalExpr(e.l, env, ctx), rv = evalExpr(e.r, env, ctx);
+      if (e.op === '/' && ctx.lang === 'java'){
+        if (rv === 0) throw new EngineError('Division by zero');
+        if (exprIsFloat(e.l, ctx) || exprIsFloat(e.r, ctx)) return lv / rv;
+        if (Number.isInteger(lv) && Number.isInteger(rv)) return Math.trunc(lv / rv);
+        return lv / rv;
+      }
+      return applyBin(e.op, lv, rv, ctx);
+    }
+    case 'Bool': {
+      const l = evalExpr(e.l, env, ctx);
+      if (e.op === 'and') return truthy(l) ? evalExpr(e.r, env, ctx) : l;
+      return truthy(l) ? l : evalExpr(e.r, env, ctx);
+    }
+    case 'Cmp': {
+      const l = evalExpr(e.l, env, ctx), r = evalExpr(e.r, env, ctx);
+      switch (e.op){
+        case '==': return deepEq(l, r);
+        case '!=': return !deepEq(l, r);
+        case '<': return l < r;
+        case '>': return l > r;
+        case '<=': return l <= r;
+        case '>=': return l >= r;
+        case 'in': case 'notin': {
+          let res;
+          if (typeof r === 'string') res = r.includes(String(l));
+          else if (Array.isArray(r)) res = r.some(x => deepEq(x, l));
+          else if (r instanceof PyDict) res = r.has(l);
+          else if (r instanceof PySet) res = r.has(l);
+          else throw new EngineError('"in" needs a string, list, dict or set on the right');
+          return e.op === 'in' ? res : !res;
+        }
+        case 'is': return deepEq(l, r);
+        case 'isnot': return !deepEq(l, r);
+      }
+      break;
+    }
+    case 'Index': {
+      const o = evalExpr(e.obj, env, ctx); const idx = evalExpr(e.idx, env, ctx);
+      if (o instanceof PyDict){ const v = o.get(idx); if (v === undefined) throw new EngineError('KeyError: ' + stringify(idx, ctx.lang) + ' — that key is not in the dict. Use .get() if the key might be missing.'); return v; }
+      if (typeof o === 'string' || Array.isArray(o)) return o[normIdx(idx, o.length)];
+      throw new EngineError('That value cannot be indexed');
+    }
+    case 'Slice': {
+      const o = evalExpr(e.obj, env, ctx);
+      const a = e.a ? evalExpr(e.a, env, ctx) : null, b = e.b ? evalExpr(e.b, env, ctx) : null;
+      if (typeof o === 'string' || Array.isArray(o)) return o.slice(a === null ? undefined : a, b === null ? undefined : b);
+      throw new EngineError('That value cannot be sliced');
+    }
+    case 'Attr': {
+      const o = evalExpr(e.obj, env, ctx);
+      if (e.name === 'length'){ if (typeof o === 'string' || Array.isArray(o)) return o.length; }
+      throw new EngineError('Unsupported attribute .' + e.name);
+    }
+    case 'Call': return evalCall(e, env, ctx);
+  }
+  throw new EngineError('Unsupported expression: ' + e.k);
+}
+function evalCall(e, env, ctx){
+  const fnNode = e.fn;
+  const kwargs = {};
+  if (e.kwargs) Object.keys(e.kwargs).forEach(k => { kwargs[k] = evalExpr(e.kwargs[k], env, ctx); });
+  // method call: obj.method(args)
+  if (fnNode.k === 'Attr'){
+    const o = evalExpr(fnNode.obj, env, ctx);
+    const args = e.args.map(a => evalExpr(a, env, ctx));
+    return callMethod(o, fnNode.name, args, ctx, kwargs);
+  }
+  if (fnNode.k !== 'Var') throw new EngineError('That call is not supported yet');
+  const name = fnNode.name;
+  const args = () => e.args.map(a => evalExpr(a, env, ctx));
+  // variable holding a lambda
+  if (!['print','System.out.println','System.out.print','range','len','str','int','float','Double.parseDouble','Integer.parseInt','abs','Math.abs','Math.max','Math.min','min','max','sorted','sum','set','list','enumerate','zip','reversed','round'].includes(name)){
+    try { const v = envGet(env, name); if (v && v.__lambda) return callLambda(v, args(), ctx); } catch (err){ /* fall through */ }
+  }
+  if (name === 'print' || name === 'System.out.println' || name === 'System.out.print'){
+    const vals = args();
+    ctx.output.push(vals.map(v => stringify(v, ctx.lang)).join(ctx.lang === 'python' ? ' ' : ''));
+    return null;
+  }
+  if (name === 'range'){
+    const a = args(); let start = 0, stop, step = 1;
+    if (a.length === 1) stop = a[0];
+    else if (a.length === 2){ start = a[0]; stop = a[1]; }
+    else if (a.length === 3){ start = a[0]; stop = a[1]; step = a[2]; }
+    else throw new EngineError('range() takes 1-3 arguments');
+    if (!step) throw new EngineError('range() step cannot be zero');
+    const out = [];
+    if (step > 0) for (let i = start; i < stop; i += step) out.push(i);
+    else for (let i = start; i > stop; i += step) out.push(i);
+    if (out.length > 100000) throw new EngineError('range() is too big');
+    return out;
+  }
+  if (name === 'len'){ const a = args(); if (typeof a[0] === 'string' || Array.isArray(a[0])) return a[0].length; if (a[0] instanceof PyDict) return a[0].entries.length; if (a[0] instanceof PySet) return a[0].items.length; throw new EngineError('len() needs a string, list, dict or set'); }
+  if (name === 'sorted'){
+    const a = args(); const items = toIterable(a[0]).slice();
+    const keyFn = kwargs.key;
+    const decorated = items.map(x => [keyFn ? (keyFn.__lambda ? callLambda(keyFn, [x], ctx) : keyFn) : x, x]);
+    const dir = kwargs.reverse ? -1 : 1;
+    decorated.sort((p, q) => dir * compareValues(p[0], q[0]));
+    return decorated.map(d => d[1]);
+  }
+  if (name === 'sum'){ const a = args(); return toIterable(a[0]).reduce((s, x) => s + x, a.length > 1 ? a[1] : 0); }
+  if (name === 'set'){ const a = args(); const s = new PySet(); if (a.length) toIterable(a[0]).forEach(x => s.add(x)); return s; }
+  if (name === 'list'){ const a = args(); return a.length ? toIterable(a[0]).slice() : []; }
+  if (name === 'enumerate'){ const a = args(); const start = a.length > 1 ? a[1] : 0; return toIterable(a[0]).map((x, i) => [start + i, x]); }
+  if (name === 'zip'){ const a = args(); const lists = a.map(toIterable); const n = Math.min.apply(null, lists.map(l => l.length)); const out = []; for (let i = 0; i < n; i++) out.push(lists.map(l => l[i])); return out; }
+  if (name === 'reversed'){ const a = args(); return toIterable(a[0]).slice().reverse(); }
+  if (name === 'round'){ const a = args(); if (a.length > 1){ const f = Math.pow(10, a[1]); return Math.round(a[0] * f) / f; } return Math.round(a[0]); }
+  if (name === 'str'){ const a = args(); return stringify(a[0], ctx.lang); }
+  if (name === 'int'){ const a = args(); return Math.trunc(Number(a[0])); }
+  if (name === 'float' || name === 'Double.parseDouble' || name === 'Integer.parseInt'){ const a = args(); return name === 'Integer.parseInt' ? Math.trunc(Number(a[0])) : Number(a[0]); }
+  if (name === 'abs' || name === 'Math.abs'){ const a = args(); return Math.abs(a[0]); }
+  if (name === 'Math.max'){ const a = args(); return Math.max.apply(null, a); }
+  if (name === 'Math.min'){ const a = args(); return Math.min.apply(null, a); }
+  if (name === 'min'){ const a = args(); return Array.isArray(a[0]) ? Math.min.apply(null, a[0]) : Math.min.apply(null, a); }
+  if (name === 'max'){ const a = args(); return Array.isArray(a[0]) ? Math.max.apply(null, a[0]) : Math.max.apply(null, a); }
+  if (ctx.funcs[name]){
+    const def = ctx.funcs[name];
+    const vals = args();
+    const local = makeEnv(null);
+    local.parent = ctx.globalEnv || null;
+    def.params.forEach((p, i) => { envSet(local, p, vals[i]); if (def.paramTypes && def.paramTypes[i]) ctx.javaTypes[p] = def.paramTypes[i]; });
+    Object.keys(kwargs).forEach(k => { if (def.params.includes(k)) envSet(local, k, kwargs[k]); });
+    try { execBlock(def.body, local, ctx, false); }
+    catch (sig){ if (sig instanceof ReturnSignal) return sig.v; throw sig; }
+    return null;
+  }
+  throw new EngineError('Unknown function "' + name + '" in v0.1');
+}
+function callMethod(o, name, args, ctx, kwargs){
+  kwargs = kwargs || {};
+  if (o instanceof PyDict){
+    if (name === 'get'){ const v = o.get(args[0]); return v === undefined ? (args.length > 1 ? args[1] : null) : v; }
+    if (name === 'items') return o.entries.map(e => [e[0], e[1]]);
+    if (name === 'keys') return o.entries.map(e => e[0]);
+    if (name === 'values') return o.entries.map(e => e[1]);
+    if (name === 'pop'){ const v = o.get(args[0]); if (v === undefined){ if (args.length > 1) return args[1]; throw new EngineError('KeyError: ' + stringify(args[0], ctx.lang)); } o.entries = o.entries.filter(e => !deepEqVal(e[0], args[0])); return v; }
+    if (name === 'setdefault'){ const v = o.get(args[0]); if (v !== undefined) return v; o.set(args[0], args.length > 1 ? args[1] : null); return args.length > 1 ? args[1] : null; }
+    if (name === 'update'){ const other = args[0]; if (other instanceof PyDict) other.entries.forEach(e => o.set(e[0], e[1])); return null; }
+    throw new EngineError('Unsupported dict method .' + name + '()');
+  }
+  if (o instanceof PySet){
+    if (name === 'add'){ o.add(args[0]); return null; }
+    if (name === 'discard'){ o.items = o.items.filter(x => !deepEqVal(x, args[0])); return null; }
+    if (name === 'remove'){ if (!o.has(args[0])) throw new EngineError('That value is not in the set'); o.items = o.items.filter(x => !deepEqVal(x, args[0])); return null; }
+    throw new EngineError('Unsupported set method .' + name + '()');
+  }
+  if (typeof o === 'string'){
+    if (name === 'join'){ const parts = toIterable(args[0]); return parts.map(x => stringify(x, 'python') === 'None' ? '' : (typeof x === 'string' ? x : String(x))).join(o); }
+    if (name === 'upper' || name === 'toUpperCase') return o.toUpperCase();
+    if (name === 'lower' || name === 'toLowerCase') return o.toLowerCase();
+    if (name === 'strip' || name === 'trim') return o.trim();
+    if (name === 'replace') return o.split(String(args[0])).join(String(args[1]));
+    if (name === 'length') return o.length;
+    if (name === 'charAt') return o[normIdx(args[0], o.length)];
+    if (name === 'substring') return o.slice(args[0], args.length > 1 ? args[1] : undefined);
+    if (name === 'contains') return o.includes(String(args[0]));
+    if (name === 'split') return args.length ? o.split(String(args[0])) : o.split(/\s+/);
+  }
+  if (Array.isArray(o)){
+    if (name === 'sort'){
+      const keyFn = kwargs.key; const dir = kwargs.reverse ? -1 : 1;
+      const decorated = o.map(x => [keyFn ? (keyFn.__lambda ? callLambda(keyFn, [x], ctx) : keyFn) : x, x]);
+      decorated.sort((p, q) => dir * compareValues(p[0], q[0]));
+      for (let i = 0; i < o.length; i++) o[i] = decorated[i][1];
+      return null;
+    }
+    if (name === 'append' || name === 'add'){ o.push(args[0]); return null; }
+    if (name === 'pop'){ if (!o.length) throw new EngineError('pop from empty list'); return args.length ? o.splice(normIdx(args[0], o.length), 1)[0] : o.pop(); }
+    if (name === 'remove'){ const i = o.indexOf(args[0]); if (i >= 0) o.splice(i, 1); return null; }
+    if (name === 'size' || name === 'length') return o.length;
+    if (name === 'get') return o[normIdx(args[0], o.length)];
+  }
+  throw new EngineError('Unsupported method .' + name + '() in v0.1');
+}
+
+/* globals access for functions: runProgram sets ctx.globalEnv before running */
+/* (patched exec: wrap) */
+const _origRun = runProgram;
+
+if (typeof module !== 'undefined' && module.exports) module.exports = {runProgram, parsePython, parseJava};
+
+</script>
+<script>
+(function(){
+'use strict';
+/* Code Dojo v2 — DE Interview Prep (Python only). All state on-device. */
+var KEY = 'codedojo.v1'; // same key: v1 saves migrate forward
+var STAGES = ['teach', 'predict', 'step', 'parsons', 'build'];
+var EXERCISES = ['predict', 'step', 'parsons', 'build'];
+var XP_PER = 10;
+
+var FUNDAMENTALS = CONCEPTS.map(function(c){
+  return {id: c.id, num: c.num, icon: c.icon, title: c.title, tagline: c.tagline,
+    teach: {body: c.teach.body, points: c.teach.points, teachCode: c.py.teachCode, teachNote: c.py.teachNote},
+    predict: c.py.predict, step: c.py.step, parsons: c.py.parsons, build: c.py.build};
+});
+var COLLECTIONS = {
+  drills: {title: '🎯 DE Interview — Python Drills', sub: 'Straightforward problems, interview pace. Finish, print your numbers, verdict from the numbers.', lessons: DE_LESSONS},
+  fundamentals: {title: '🐍 Python Fundamentals — Warm-Up', sub: 'The fluency base under the drills.', lessons: FUNDAMENTALS}
+};
+
+var storageOK = true;
+function lsGet(){ try { return localStorage.getItem(KEY); } catch (e){ storageOK = false; return null; } }
+function lsSet(v){ try { localStorage.setItem(KEY, v); } catch (e){ storageOK = false; } }
+function defaultState(){
+  return {v: 2, xp: {drills: 0, fundamentals: 0}, done: {drills: {}, fundamentals: {}}, mistakes: [], streak: {last: '', count: 0}};
+}
+function migrate(s){
+  if (!s) return defaultState();
+  if (s.v === 2){
+    var d = defaultState();
+    d.xp = Object.assign(d.xp, s.xp || {});
+    d.done = Object.assign(d.done, s.done || {});
+    d.mistakes = s.mistakes || []; d.streak = s.streak || d.streak;
+    return d;
+  }
+  if (s.v === 1){ // v1 dual-track save: keep Python fundamentals, drop Java
+    var m = defaultState();
+    m.xp.fundamentals = (s.xp && s.xp.py) || 0;
+    m.done.fundamentals = (s.done && s.done.py) || {};
+    m.streak = s.streak || m.streak;
+    m.mistakes = (s.mistakes || []).filter(function(x){ return x.track === 'py'; }).map(function(x){ return {coll: 'fundamentals', concept: x.concept, kind: x.kind, when: x.when}; });
+    return m;
+  }
+  return defaultState();
+}
+function load(){ try { var raw = lsGet(); if (raw) return migrate(JSON.parse(raw)); } catch (e){} return defaultState(); }
+var state = load();
+function save(){ lsSet(JSON.stringify(state)); }
+save(); // persist migration immediately
+function todayStr(){ var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+(function touchStreak(){
+  var t = todayStr();
+  if (state.streak.last !== t){
+    var y = new Date(); y.setDate(y.getDate() - 1);
+    var ys = y.getFullYear() + '-' + String(y.getMonth() + 1).padStart(2, '0') + '-' + String(y.getDate()).padStart(2, '0');
+    state.streak.count = state.streak.last === ys ? state.streak.count + 1 : 1;
+    state.streak.last = t; save();
+  }
+})();
+
+function escHtml(s){ return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function fmtVal(v){
+  if (v === null || v === undefined) return 'None';
+  if (v === true) return 'True';
+  if (v === false) return 'False';
+  if (typeof v === 'string') return '"' + v + '"';
+  if (Array.isArray(v)) return '[' + v.map(fmtVal).join(', ') + ']';
+  if (typeof v === 'object') return '{' + Object.keys(v).map(function(k){ var val = v[k]; return "'" + k + "': " + (typeof val === 'string' ? "'" + val + "'" : fmtVal(val)); }).join(', ') + '}';
+  return String(v);
+}
+function lessonsOf(coll){ return COLLECTIONS[coll].lessons; }
+function lessonById(coll, id){ var ls = lessonsOf(coll); for (var i = 0; i < ls.length; i++) if (ls[i].id === id) return ls[i]; return null; }
+function doneMap(coll, id){ if (!state.done[coll][id]) state.done[coll][id] = {}; return state.done[coll][id]; }
+function exDone(coll, id, kind){ return !!doneMap(coll, id)[kind]; }
+function lessonComplete(coll, id){ return EXERCISES.every(function(k){ return exDone(coll, id, k); }); }
+function unlocked(coll, idx){ if (idx === 0) return true; return lessonComplete(coll, lessonsOf(coll)[idx - 1].id); }
+function completeExercise(coll, id, kind){
+  var m = doneMap(coll, id);
+  if (!m[kind]){ m[kind] = true; state.xp[coll] += XP_PER; save(); }
+}
+function recordMistake(coll, id, kind){
+  state.mistakes.push({coll: coll, concept: id, kind: kind, when: todayStr()});
+  if (state.mistakes.length > 200) state.mistakes = state.mistakes.slice(-200);
+  save();
+}
+
+/* ---------- session ---------- */
+var S = {screen: 'home'};
+var timerInt = null;
+function stopTimer(){ if (timerInt){ clearInterval(timerInt); timerInt = null; } }
+function goHome(){ stopTimer(); S = {screen: 'home'}; render(); window.scrollTo(0, 0); }
+function openLesson(coll, id, stage){
+  stopTimer();
+  var L = lessonById(coll, id);
+  S = {screen: 'lesson', coll: coll, conceptId: id, stage: stage || firstOpenStage(coll, id),
+       stepIdx: 0, selected: -1, checked: false, wasCorrect: false,
+       placed: [], scrambled: scramble(L.parsons.lines),
+       buildCode: null, buildResult: null, buildFails: 0, showHint: false, showSolution: false,
+       shapeDone: !L.build.shapeQ, shapeMsg: '', shapeGood: false,
+       needVerdict: false, verdictDone: !L.build.verdictQ, verdictMsg: '', verdictGood: false,
+       startedAt: Date.now()};
+  render(); window.scrollTo(0, 0);
+}
+function firstOpenStage(coll, id){
+  for (var i = 0; i < EXERCISES.length; i++) if (!exDone(coll, id, EXERCISES[i])) return EXERCISES[i] === 'predict' ? 'teach' : EXERCISES[i];
+  return 'teach';
+}
+function scramble(lines){
+  var idx = lines.map(function(_, i){ return i; });
+  if (idx.length < 2) return idx;
+  var out = idx.slice(1).concat(idx[0]);
+  if (out.join() === idx.join()) out = idx.slice().reverse();
+  if (out.length > 2){ var t = out[0]; out[0] = out[out.length - 1]; out[out.length - 1] = t; }
+  if (out.join() === idx.join()) out = idx.slice().reverse();
+  return out;
+}
+function elapsedStr(){
+  var s = Math.floor((Date.now() - (S.startedAt || Date.now())) / 1000);
+  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+}
+
+/* ---------- rendering ---------- */
+var app = document.getElementById('app');
+function render(){
+  stopTimer();
+  if (S.screen === 'home') app.innerHTML = viewHome();
+  else if (S.screen === 'lesson') app.innerHTML = viewLesson();
+  else if (S.screen === 'review') app.innerHTML = viewReview();
+  if (S.screen === 'lesson'){
+    var ta = document.getElementById('editor');
+    if (ta && S.buildCode !== null && S.buildCode !== undefined) ta.value = S.buildCode;
+    timerInt = setInterval(function(){
+      var el = document.getElementById('timerEl');
+      if (el) el.textContent = '⏱ ' + elapsedStr();
+    }, 1000);
+  }
+}
+function headerHtml(){
+  return '<div class="topbar"><div class="logo">🥋 Code<span>Dojo</span></div>' +
+    '<div class="stats"><div class="stat">⭐ ' + (state.xp.drills + state.xp.fundamentals) + ' XP</div>' +
+    '<div class="stat">🔥 ' + state.streak.count + '</div></div></div>';
+}
+function sectionHtml(coll){
+  var C = COLLECTIONS[coll];
+  var h = '<div class="unithead">' + C.title + '</div><p class="note" style="margin:-4px 2px 10px">' + escHtml(C.sub) + '</p>';
+  C.lessons.forEach(function(L, i){
+    var un = unlocked(coll, i), comp = lessonComplete(coll, L.id);
+    var doneCount = EXERCISES.filter(function(k){ return exDone(coll, L.id, k); }).length;
+    var dots = comp ? '✅ Done' : (un ? doneCount + ' / 4 done' : '🔒 Locked');
+    h += '<button class="pathcard' + (comp ? ' done' : '') + '" ' + (un ? 'onclick="H.open(\'' + coll + '\',\'' + L.id + '\')"' : 'disabled') + '>' +
+      '<div class="icon">' + L.icon + '</div><div><div class="t">' + (i + 1) + '. ' + escHtml(L.title) + '</div>' +
+      '<div class="s">' + escHtml(L.tagline) + (L.target ? ' · ⏱ target ' + L.target : '') + '</div></div><div class="dots">' + dots + '</div></button>';
+  });
+  var total = C.lessons.length * 4;
+  var doneTotal = C.lessons.reduce(function(n, L){ return n + EXERCISES.filter(function(k){ return exDone(coll, L.id, k); }).length; }, 0);
+  h += '<div class="progressbar"><div style="width:' + Math.round(doneTotal / total * 100) + '%"></div></div>';
+  return h;
+}
+function viewHome(){
+  var h = headerHtml();
+  if (!storageOK) h += '<div class="warn">⚠️ This browser is blocking local saving in this context, so progress may not survive closing the tab. Use <b>Export progress</b> below after each session to keep a backup file you can re-import.</div>';
+  h += sectionHtml('drills');
+  h += sectionHtml('fundamentals');
+  h += '<div class="card"><h3 style="margin-top:0">How a drill works</h3>' +
+    '<p>Predict → step through → rebuild → build, at interview pace. Every drill Build makes you pass two habit gates: a <b>shape check</b> before the editor unlocks (name the set, check the shape), and a <b>verdict check</b> after a passing run — you may only claim what your program printed.</p>' +
+    (state.mistakes.length ? '<p class="note"><a href="#" onclick="H.review();return false;">' + state.mistakes.length + ' mistake' + (state.mistakes.length === 1 ? '' : 's') + ' logged for review</a></p>' : '') + '</div>';
+  h += '<div class="foottools">' +
+    '<button onclick="H.exportProgress()">⬇️ Export progress</button>' +
+    '<button onclick="document.getElementById(\'importFile\').click()">⬆️ Import progress</button>' +
+    '<button onclick="H.resetAll()">↺ Reset everything</button>' +
+    '<input type="file" id="importFile" accept=".json,application/json" class="hidden" onchange="H.importProgress(this)">' +
+    '</div>';
+  h += '<p class="note" style="margin-top:14px">Coming next: the SQL Arena (visual query stepper, window functions, grain traps), then Modeling & Pipelines and timed Sprint mode.</p>';
+  return h;
+}
+function stageChips(coll, L){
+  var labels = {teach: 'Learn', predict: 'Predict', step: 'Step thru', parsons: 'Rebuild', build: 'Build'};
+  return '<div class="stagechips">' + STAGES.map(function(st){
+    var cls = st === S.stage ? 'now' : (st === 'teach' ? (S.stage !== 'teach' ? 'done' : '') : (exDone(coll, L.id, st) ? 'done' : ''));
+    return '<div class="chip ' + cls + '">' + labels[st] + '</div>';
+  }).join('') + '</div>';
+}
+function codeBlock(code, highlightLine){
+  if (!highlightLine) return '<pre class="code">' + escHtml(code) + '</pre>';
+  var lines = code.split('\n').map(function(l, i){
+    return (i + 1 === highlightLine) ? '<span class="hl">' + (escHtml(l) || ' ') + '</span>' : escHtml(l);
+  });
+  return '<pre class="code">' + lines.join('\n') + '</pre>';
+}
+function viewLesson(){
+  var L = lessonById(S.coll, S.conceptId);
+  var doneCount = EXERCISES.filter(function(k){ return exDone(S.coll, L.id, k); }).length;
+  var h = '<button class="backbtn" onclick="H.home()">← All lessons</button>';
+  h += '<h2 style="margin:2px 0 4px">' + L.icon + ' ' + escHtml(L.title) + '</h2>';
+  h += '<div class="note"><span id="timerEl">⏱ ' + elapsedStr() + '</span>' + (L.target ? ' · target pace ' + L.target + ' — straightforward problem: finish it, print the numbers, say the verdict' : '') + '</div>';
+  h += '<div class="progressbar"><div style="width:' + (doneCount / 4 * 100) + '%"></div></div>';
+  h += stageChips(S.coll, L);
+  if (S.stage === 'teach') h += viewTeach(L);
+  else if (S.stage === 'predict') h += viewPredict(L);
+  else if (S.stage === 'step') h += viewStep(L);
+  else if (S.stage === 'parsons') h += viewParsons(L);
+  else if (S.stage === 'build') h += viewBuild(L);
+  else if (S.stage === 'done') h += viewDone(L);
+  return h;
+}
+function nextStageBtn(label, stage){
+  return '<button class="btn" onclick="H.toStage(\'' + stage + '\')">' + label + '</button>';
+}
+function viewTeach(L){
+  var h = '<div class="card">';
+  L.teach.body.split('\n\n').forEach(function(p){ h += '<p>' + escHtml(p) + '</p>'; });
+  h += '<h3>Key ideas</h3><ul>' + L.teach.points.map(function(p){ return '<li>' + escHtml(p) + '</li>'; }).join('') + '</ul>';
+  h += '<div class="code-label">Example</div>' + codeBlock(L.teach.teachCode);
+  h += '<div class="note">' + escHtml(L.teach.teachNote) + '</div>';
+  h += nextStageBtn('Start: Predict →', 'predict');
+  return h + '</div>';
+}
+function choiceBtns(q){
+  return q.choices.map(function(ch, i){
+    var cls = '';
+    if (S.checked && i === q.answer) cls = 'correct';
+    else if (S.checked && i === S.selected) cls = 'wrong';
+    else if (i === S.selected) cls = 'selected';
+    return '<button class="choice ' + cls + '" onclick="H.pick(' + i + ')">' + escHtml(ch) + '</button>';
+  }).join('');
+}
+function feedbackHtml(good, why){
+  return '<div class="feedback ' + (good ? 'good' : 'bad') + '">' + (good ? '✅ Correct. ' : '❌ Not quite. ') + escHtml(why) + '</div>';
+}
+function viewPredict(L){
+  var q = L.predict;
+  var h = '<div class="card"><h3 style="margin-top:0">🔮 Predict' + (q.crash ? ' — one of these traps is live' : '') + '</h3>' +
+    '<p>Read the code and commit to an answer <i>before</i> anything runs. Guessing first is what makes it stick.</p>' +
+    codeBlock(q.code) + '<p><b>' + escHtml(q.question) + '</b></p>' + choiceBtns(q);
+  if (!S.checked) h += '<button class="btn" ' + (S.selected < 0 ? 'disabled' : '') + ' onclick="H.checkChoice(\'predict\')">Check answer</button>';
+  else {
+    h += feedbackHtml(S.wasCorrect, q.why);
+    if (S.wasCorrect) h += nextStageBtn('Next: Step through →', 'step');
+    else h += '<button class="btn secondary" onclick="H.retryChoice()">Try again</button>';
+  }
+  return h + '</div>';
+}
+function viewStep(L){
+  var st = L.step; var step = st.steps[Math.min(S.stepIdx, st.steps.length - 1)];
+  var h = '<div class="card"><h3 style="margin-top:0">👣 Step through it</h3>' +
+    '<p>Execute the code in your head, one line at a time. Watch the boxes.</p>' + codeBlock(st.code, step.line);
+  h += '<div class="area-label">Variables</div><div class="vars">' +
+    (Object.keys(step.vars).length ? Object.keys(step.vars).map(function(k){ return '<div class="varbox">' + escHtml(k) + ' = <b>' + escHtml(fmtVal(step.vars[k])) + '</b></div>'; }).join('') : '<div class="note">— none yet —</div>') + '</div>';
+  h += '<div class="area-label">Output so far</div><div class="outbox">' + (step.out ? escHtml(step.out) : ' ') + '</div>';
+  h += '<div class="stepnote">Step ' + (S.stepIdx + 1) + ' of ' + st.steps.length + ' — ' + escHtml(step.note) + '</div>';
+  h += '<div class="btnrow">' +
+    '<button class="btn secondary" ' + (S.stepIdx === 0 ? 'disabled' : '') + ' onclick="H.stepMove(-1)">← Back</button>' +
+    '<button class="btn" ' + (S.stepIdx >= st.steps.length - 1 ? 'disabled' : '') + ' onclick="H.stepMove(1)">Step →</button></div>';
+  if (S.stepIdx >= st.steps.length - 1){
+    var q = st.finalQ;
+    h += '<h3>Check yourself</h3><p><b>' + escHtml(q.question) + '</b></p>' + choiceBtns(q);
+    if (!S.checked) h += '<button class="btn" ' + (S.selected < 0 ? 'disabled' : '') + ' onclick="H.checkChoice(\'step\')">Check answer</button>';
+    else {
+      h += feedbackHtml(S.wasCorrect, q.why);
+      if (S.wasCorrect) h += nextStageBtn('Next: Rebuild it →', 'parsons');
+      else h += '<button class="btn secondary" onclick="H.retryChoice()">Try again</button>';
+    }
+  }
+  return h + '</div>';
+}
+function viewParsons(L){
+  var p = L.parsons;
+  var h = '<div class="card"><h3 style="margin-top:0">🧱 Rebuild the program</h3><p>' + escHtml(p.prompt) + '</p>' +
+    '<p class="note">Tap lines in the right order. Tap a placed line to send it back.</p>';
+  h += '<div class="area-label">Your program</div>';
+  if (!S.placed.length) h += '<div class="note" style="margin-bottom:8px">— empty —</div>';
+  S.placed.forEach(function(si){
+    h += '<button class="parline placed" onclick="H.parsonsRemove(' + S.placed.indexOf(si) + ')">' + escHtml(p.lines[S.scrambled[si]]) + '</button>';
+  });
+  h += '<div class="area-label">Line bank</div>';
+  S.scrambled.forEach(function(origIdx, si){
+    if (S.placed.indexOf(si) >= 0) return;
+    h += '<button class="parline" onclick="H.parsonsAdd(' + si + ')">' + escHtml(p.lines[origIdx]) + '</button>';
+  });
+  if (S.parsonsMsg) h += '<div class="feedback ' + (S.parsonsGood ? 'good' : 'bad') + '">' + escHtml(S.parsonsMsg) + '</div>';
+  if (S.parsonsGood) h += nextStageBtn('Next: Build it yourself →', 'build');
+  else h += '<button class="btn" ' + (S.placed.length !== p.lines.length ? 'disabled' : '') + ' onclick="H.parsonsCheck()">Check order</button>';
+  return h + '</div>';
+}
+function gateHtml(kind, q, msg, good){
+  var h = '<div class="card" style="border-color:var(--amber)"><h3 style="margin-top:0">' + (kind === 'shape' ? '🔎 Shape check — before you code' : '🧾 Verdict check — from your printed numbers only') + '</h3>' +
+    '<p><b>' + escHtml(q.question) + '</b></p>';
+  h += q.choices.map(function(ch, i){
+    return '<button class="choice" onclick="H.gatePick(\'' + kind + '\',' + i + ')">' + escHtml(ch) + '</button>';
+  }).join('');
+  if (msg) h += '<div class="feedback ' + (good ? 'good' : 'bad') + '">' + escHtml(msg) + '</div>';
+  return h + '</div>';
+}
+function viewBuild(L){
+  var b = L.build;
+  if (b.shapeQ && !S.shapeDone) return gateHtml('shape', b.shapeQ, S.shapeMsg, S.shapeGood);
+  var h = '<div class="card"><h3 style="margin-top:0">⌨️ Build it</h3>';
+  if (b.shapeQ && S.shapeMsg) h += '<div class="feedback good" style="margin:0 0 12px">🔎 ' + escHtml(S.shapeMsg) + '</div>';
+  h += '<p>' + escHtml(b.prompt) + '</p>' +
+    '<textarea class="editor" id="editor" spellcheck="false" autocapitalize="off" autocomplete="off">' + escHtml(S.buildCode === null ? b.starter : S.buildCode) + '</textarea>';
+  h += '<div class="btnrow"><button class="btn" onclick="H.runBuild()">▶ Run & check</button>' +
+    '<button class="btn secondary" onclick="H.toggleHint()">' + (S.showHint ? 'Hide hint' : '💡 Hint') + '</button></div>';
+  if (S.showHint) h += '<div class="stepnote" style="margin-top:12px">' + escHtml(b.hint) + '</div>';
+  if (S.buildFails >= 2 && !S.showSolution) h += '<button class="btn secondary" style="margin-top:10px" onclick="H.showSolution()">Show solution</button>';
+  if (S.showSolution) h += '<div class="code-label" style="margin-top:14px">Solution</div>' + codeBlock(b.solution);
+  if (S.buildResult){
+    var r = S.buildResult;
+    h += '<div class="area-label">Your output</div><div class="outbox">' + (r.output.length ? escHtml(r.output.join('\n')) : ' ') + '</div>';
+    if (r.error) h += '<div class="feedback bad">⚠️ ' + escHtml(r.error) + '</div>';
+    if (r.checks) h += r.checks.map(function(ch){
+      return '<div class="checkline">' + (ch.pass ? '✅' : '❌') + ' ' + escHtml(ch.label) + '</div>';
+    }).join('');
+    if (r.allPass && !S.needVerdict) h += '<div class="feedback good">✅ All checks passed. That one is yours — you wrote it.</div>' + nextStageBtn('Finish lesson 🎉', 'done');
+    if (r.allPass && S.needVerdict) h += '<div class="feedback good">✅ Code passes. One gate left: the verdict.</div>';
+  }
+  h += '</div>';
+  if (S.needVerdict && b.verdictQ){
+    if (S.verdictDone) h += '<div class="card"><div class="feedback good" style="margin:0">🧾 ' + escHtml(S.verdictMsg) + '</div>' + nextStageBtn('Finish lesson 🎉', 'done') + '</div>';
+    else h += gateHtml('verdict', b.verdictQ, S.verdictMsg, S.verdictGood);
+  }
+  return h;
+}
+function viewDone(L){
+  var ls = lessonsOf(S.coll); var idx = ls.indexOf(L);
+  var h = '<div class="card center"><div class="bigemoji">🎉</div><h2>Lesson complete!</h2>' +
+    '<p>You earned ' + (XP_PER * 4) + ' XP in <b>' + escHtml(COLLECTIONS[S.coll].title) + '</b> for <b>' + escHtml(L.title) + '</b> — in ' + elapsedStr() + (L.target ? ' (target ' + L.target + ')' : '') + '.</p>';
+  if (idx + 1 < ls.length) h += '<button class="btn" onclick="H.open(\'' + S.coll + '\',\'' + ls[idx + 1].id + '\')">Next lesson: ' + escHtml(ls[idx + 1].title) + ' →</button>';
+  h += '<button class="btn secondary" onclick="H.home()">Back to path</button></div>';
+  return h;
+}
+function viewReview(){
+  var h = headerHtml() + '<button class="backbtn" onclick="H.home()">← Back</button><div class="card"><h2>Review queue</h2>' +
+    '<p>Every wrong answer landed here. The fix is not re-reading — it is redoing that exercise until it is easy.</p>';
+  if (!state.mistakes.length) h += '<p class="note">Nothing logged yet. Clean slate.</p>';
+  var seen = {};
+  state.mistakes.slice().reverse().forEach(function(m){
+    var key = m.coll + m.concept + m.kind; if (seen[key]) return; seen[key] = 1;
+    var L = lessonById(m.coll, m.concept); if (!L) return;
+    h += '<div class="checkline">❌ ' + escHtml(L.title) + ' — ' + escHtml(m.kind) + ' (' + escHtml(m.when) + ') ' +
+      '<a href="#" onclick="H.openFromReview(\'' + m.coll + '\',\'' + m.concept + '\',\'' + m.kind + '\');return false;">redo →</a></div>';
+  });
+  return h + '</div>';
+}
+
+/* ---------- handlers ---------- */
+window.H = {
+  home: goHome,
+  review: function(){ stopTimer(); S = {screen: 'review'}; render(); window.scrollTo(0, 0); },
+  open: function(coll, id){ openLesson(coll, id, null); },
+  openFromReview: function(coll, id, kind){ openLesson(coll, id, kind === 'build' || kind === 'shape' || kind === 'verdict' ? 'build' : kind); },
+  toStage: function(stage){
+    if (stage === 'build' && S.buildCode === null){
+      var L = lessonById(S.coll, S.conceptId); S.buildCode = L.build.starter;
+    }
+    S.stage = stage; S.selected = -1; S.checked = false; S.wasCorrect = false;
+    render(); window.scrollTo(0, 0);
+  },
+  pick: function(i){ if (!S.checked){ S.selected = i; render(); } },
+  retryChoice: function(){ S.checked = false; S.selected = -1; render(); },
+  checkChoice: function(kind){
+    var L = lessonById(S.coll, S.conceptId);
+    var q = kind === 'predict' ? L.predict : L.step.finalQ;
+    S.checked = true; S.wasCorrect = S.selected === q.answer;
+    if (S.wasCorrect) completeExercise(S.coll, L.id, kind);
+    else recordMistake(S.coll, L.id, kind);
+    render();
+  },
+  gatePick: function(kind, i){
+    var L = lessonById(S.coll, S.conceptId);
+    var q = kind === 'shape' ? L.build.shapeQ : L.build.verdictQ;
+    if (i === q.answer){
+      if (kind === 'shape'){ S.shapeDone = true; S.shapeGood = true; S.shapeMsg = 'Correct — ' + q.why; }
+      else { S.verdictDone = true; S.verdictGood = true; S.verdictMsg = 'Correct — ' + q.why; completeExercise(S.coll, L.id, 'build'); }
+    } else {
+      if (kind === 'shape'){ S.shapeGood = false; S.shapeMsg = 'Not yet. ' + q.why; }
+      else { S.verdictGood = false; S.verdictMsg = 'That verdict outruns your printed numbers. ' + q.why; }
+      recordMistake(S.coll, L.id, kind);
+    }
+    render();
+  },
+  stepMove: function(d){ S.stepIdx = Math.max(0, S.stepIdx + d); S.selected = -1; S.checked = false; render(); },
+  parsonsAdd: function(si){ S.placed.push(si); S.parsonsMsg = ''; render(); },
+  parsonsRemove: function(pos){ S.placed.splice(pos, 1); S.parsonsMsg = ''; render(); },
+  parsonsCheck: function(){
+    var L = lessonById(S.coll, S.conceptId); var p = L.parsons;
+    var got = S.placed.map(function(si){ return S.scrambled[si]; });
+    var good = got.length === p.lines.length && got.every(function(v, i){ return v === i; });
+    if (good){
+      S.parsonsGood = true; S.parsonsMsg = '✅ Exactly right — and it runs, producing: ' + p.expected.join(' · ');
+      completeExercise(S.coll, L.id, 'parsons');
+    } else {
+      S.parsonsGood = false;
+      var firstWrong = 0; while (firstWrong < got.length && got[firstWrong] === firstWrong) firstWrong++;
+      S.parsonsMsg = '❌ Not yet — the first line in the wrong place is line ' + (firstWrong + 1) + ' of your program. Think about what has to exist before it can be used.';
+      recordMistake(S.coll, L.id, 'parsons');
+    }
+    render();
+  },
+  toggleHint: function(){
+    var ta = document.getElementById('editor'); if (ta) S.buildCode = ta.value;
+    S.showHint = !S.showHint; render();
+  },
+  showSolution: function(){
+    var ta = document.getElementById('editor'); if (ta) S.buildCode = ta.value;
+    S.showSolution = true; render();
+  },
+  runBuild: function(){
+    var ta = document.getElementById('editor'); if (!ta) return;
+    S.buildCode = ta.value;
+    var L = lessonById(S.coll, S.conceptId); var b = L.build;
+    var r = runProgram('python', S.buildCode);
+    var checks = [];
+    if (!r.ok){
+      checks.push({pass: false, label: 'Program runs without errors'});
+      S.buildResult = {output: r.output, error: r.error, checks: checks, allPass: false};
+      S.buildFails++; recordMistake(S.coll, L.id, 'build');
+    } else {
+      var allPass = true;
+      b.checks.forEach(function(chk){
+        if (chk.type === 'output'){
+          var pass = JSON.stringify(r.output) === JSON.stringify(chk.expected);
+          checks.push({pass: pass, label: 'Output is exactly: ' + chk.expected.join(' · ')});
+          if (!pass) allPass = false;
+        } else if (chk.type === 'var'){
+          var pass = JSON.stringify(r.globals[chk.name]) === JSON.stringify(chk.expected);
+          checks.push({pass: pass, label: chk.name + ' ends up as ' + fmtVal(chk.expected) + (pass ? '' : ' (yours: ' + fmtVal(r.globals[chk.name]) + ')')});
+          if (!pass) allPass = false;
+        }
+      });
+      S.buildResult = {output: r.output, error: null, checks: checks, allPass: allPass};
+      if (allPass){
+        if (b.verdictQ){ S.needVerdict = true; }
+        else completeExercise(S.coll, L.id, 'build');
+      } else { S.buildFails++; recordMistake(S.coll, L.id, 'build'); }
+    }
+    render();
+  },
+  exportProgress: function(){
+    var blob = new Blob([JSON.stringify(state, null, 2)], {type: 'application/json'});
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'codedojo-progress.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
+  },
+  importProgress: function(input){
+    var f = input.files && input.files[0]; if (!f) return;
+    var reader = new FileReader();
+    reader.onload = function(){
+      try {
+        var s = JSON.parse(reader.result);
+        if (!s || (s.v !== 1 && s.v !== 2)) throw new Error('bad file');
+        state = migrate(s); save(); goHome();
+        alert('Progress imported ✅');
+      } catch (e){ alert('That file does not look like a Code Dojo progress backup.'); }
+    };
+    reader.readAsText(f);
+  },
+  resetAll: function(){
+    if (confirm('Reset ALL Code Dojo progress on this device? Export first if you might want it back.')){
+      state = defaultState(); try { localStorage.removeItem(KEY); } catch (e){}
+      save(); goHome();
+    }
+  }
+};
+
+render();
+})();
+
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('sw.js').catch(function(e) { console.log('SW failed', e); });
+  });
+}
+</script>
+</body>
+</html>

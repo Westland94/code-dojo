@@ -1,0 +1,13 @@
+{
+  "name": "Code Dojo — DE Interview Prep",
+  "short_name": "Code Dojo",
+  "description": "Local-first Data Engineer interview prep: Python drills with shape and verdict habit gates.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f6fb",
+  "theme_color": "#101828",
+  "icons": [
+    {"src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}
+  ]
+}
