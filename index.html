@@ -4639,14 +4639,19 @@ function javaQuestionById(qid){
   return null;
 }
 function javaPassedInChapter(ch){ return ch.questions.filter(function(q){ return !!state.done.javaQ[q.id]; }).length; }
-function javaChapterUnlocked(idx){ if (idx === 0) return true; return javaPassedInChapter(JAVA_CHAPTERS[idx - 1]) >= 7; }
+function javaQuestionOpen(ch, i){
+  /* Progressive reveal: chapters are all open; inside a chapter, a question
+     opens when it is first, already passed, or the previous one is passed. */
+  if (i === 0) return true;
+  return !!state.done.javaQ[ch.questions[i].id] || !!state.done.javaQ[ch.questions[i - 1].id];
+}
 function tagStat(tag){ if (!state.tagStats[tag]) state.tagStats[tag] = {pass: 0, fail: 0, streak: 0}; return state.tagStats[tag]; }
 function javaTagPass(q){ q.tags.forEach(function(t){ var st = tagStat(t); st.pass++; st.streak = 0; }); }
 function javaTagFail(q){ q.tags.forEach(function(t){ var st = tagStat(t); st.fail++; st.streak++; }); }
 function strugglingTags(){ return Object.keys(state.tagStats).filter(function(t){ return state.tagStats[t].streak >= 3 && JAVA_TAG_INFO[t]; }); }
 function remedialFor(tag){
   var out = [];
-  JAVA_CHAPTERS.forEach(function(ch){ ch.questions.forEach(function(q){ if (q.tags.indexOf(tag) >= 0) out.push({ch: ch, q: q}); }); });
+  JAVA_CHAPTERS.forEach(function(ch){ ch.questions.forEach(function(q, i){ if (q.tags.indexOf(tag) >= 0 && javaQuestionOpen(ch, i)) out.push({ch: ch, q: q}); }); });
   out.sort(function(a, b){ return (state.done.javaQ[a.q.id] ? 1 : 0) - (state.done.javaQ[b.q.id] ? 1 : 0); });
   return out.slice(0, 3);
 }
@@ -4665,13 +4670,20 @@ function javaTopicListHtml(tag){
   var info = JAVA_TAG_INFO[tag];
   var typeIcon = {build: '\u2328\uFE0F', trace: '\uD83D\uDD2E', classify: '\uD83D\uDD0D'};
   var h = '<div class="card"><h3 style="margin-top:0">\uD83C\uDFF7\uFE0F Topic: ' + escHtml(info.label) + '</h3>' +
-    '<p class="note">' + escHtml(info.objective) + ' First taught in Chapter ' + (info.chapter + 1) + '. Topic view is open practice \u2014 chapter unlocks still run on the chapter path.</p>';
+    '<p class="note">' + escHtml(info.objective) + ' First taught in Chapter ' + (info.chapter + 1) + '. Questions reveal in chapter order \u2014 locked ones open as you work through their chapter.</p>';
   var n = 0;
   JAVA_CHAPTERS.forEach(function(ch){
     ch.questions.forEach(function(q, i){
       if (q.tags.indexOf(tag) < 0) return;
       n++;
       var done = !!state.done.javaQ[q.id], cold = coldPending('java', q.id);
+      if (!javaQuestionOpen(ch, i)){
+        h += '<button class="qrow" disabled>' +
+          '<div class="qn">\uD83D\uDD12</div><div class="qt"><div>Ch ' + ch.n + ' \u00B7 Question ' + (i + 1) + ' \u2014 locked</div>' +
+          '<div class="s">Work through Chapter ' + ch.n + ' in order to reveal it</div></div>' +
+          '<div class="dots">\uD83D\uDD12</div></button>';
+        return;
+      }
       h += '<button class="qrow" onclick="H.openQuestion(\'' + ch.id + '\',\'' + q.id + '\')">' +
         '<div class="qn">' + typeIcon[q.type] + '</div><div class="qt"><div>Ch ' + ch.n + ' \u00B7 ' + escHtml(q.title) + '</div>' +
         '<div class="s">' + escHtml(q.diff) + ' \u00B7 ' + q.tags.map(function(t){ return (JAVA_TAG_INFO[t] || {}).label || t; }).join(' \u00B7 ') + '</div></div>' +
@@ -4682,7 +4694,7 @@ function javaTopicListHtml(tag){
   return h;
 }
 function javaSectionHtml(){
-  var h = '<div class="unithead">\u2615 Java \u2014 CSCI-241 Track</div><p class="note" style="margin:-4px 2px 10px">Built chapter by chapter from the course learning outcomes: 10 questions per chapter, pass 7 to unlock the next. Stumble repeatedly on one fundamental and the dojo points you back to exactly where it was taught.</p>';
+  var h = '<div class="unithead">\u2615 Java \u2014 CSCI-241 Track</div><p class="note" style="margin:-4px 2px 10px">Built chapter by chapter from the course learning outcomes. Every chapter is open from the start \u2014 inside a chapter, questions reveal one at a time as you pass them. Stumble repeatedly on one fundamental and the dojo points you back to exactly where it was taught.</p>';
   strugglingTags().forEach(function(tag){
     var info = JAVA_TAG_INFO[tag];
     h += '<div class="card" style="border-color:var(--amber)"><h3 style="margin-top:0">\uD83D\uDCCC Go back to move forward \u2014 ' + escHtml(info.label) + '</h3>' +
@@ -4700,11 +4712,11 @@ function javaSectionHtml(){
   if (JTOPIC){ h += javaTopicListHtml(JTOPIC); return h; }
   h += '<div class="cards">';
   JAVA_CHAPTERS.forEach(function(ch, i){
-    var un = javaChapterUnlocked(i), passed = javaPassedInChapter(ch);
+    var passed = javaPassedInChapter(ch);
     var cold = ch.questions.some(function(q){ return coldPending('java', q.id); });
-    h += '<button class="pathcard' + (passed === 10 ? ' done' : '') + '" ' + (un ? 'onclick="H.openChapter(\'' + ch.id + '\')"' : 'disabled') + '>' +
+    h += '<button class="pathcard' + (passed === 10 ? ' done' : '') + '" onclick="H.openChapter(\'' + ch.id + '\')">' +
       '<div class="icon">' + ch.icon + '</div><div><div class="t">Chapter ' + ch.n + '. ' + escHtml(ch.title) + '</div>' +
-      '<div class="s">' + escHtml(ch.sub) + (cold ? ' \u00B7 \u2744\uFE0F cold recheck due' : '') + '</div></div><div class="dots">' + (un ? passed + ' / 10' + (passed === 10 ? ' \u2705' : '') : '\uD83D\uDD12 Pass 7 in Ch ' + JAVA_CHAPTERS[i - 1].n) + '</div></button>';
+      '<div class="s">' + escHtml(ch.sub) + (cold ? ' \u00B7 \u2744\uFE0F cold recheck due' : '') + '</div></div><div class="dots">' + passed + ' / 10' + (passed === 10 ? ' \u2705' : '') + '</div></button>';
   });
   h += '</div>';
   var totalQ = JAVA_CHAPTERS.length * 10;
@@ -4714,7 +4726,6 @@ function javaSectionHtml(){
 }
 function viewJavaChapter(){
   var ch = javaChapterById(S.chId); var passed = javaPassedInChapter(ch);
-  var idx = JAVA_CHAPTERS.indexOf(ch);
   var h = headerHtml() + '<button class="backbtn" onclick="H.home()">\u2190 All tracks</button>';
   h += '<h2 style="margin:2px 0 4px">' + ch.icon + ' Chapter ' + ch.n + ': ' + escHtml(ch.title) + '</h2>';
   h += '<div class="note">' + escHtml(ch.objectives) + '</div>';
@@ -4725,13 +4736,19 @@ function viewJavaChapter(){
   var typeIcon = {build: '\u2328\uFE0F', trace: '\uD83D\uDD2E', classify: '\uD83D\uDD0D'};
   ch.questions.forEach(function(q, i){
     var done = !!state.done.javaQ[q.id], cold = coldPending('java', q.id);
+    if (!javaQuestionOpen(ch, i)){
+      h += '<button class="qrow" disabled>' +
+        '<div class="qn">' + (i + 1) + '</div><div class="qt"><div>\uD83D\uDD12 Locked</div>' +
+        '<div class="s">Pass Question ' + i + ' to reveal this challenge</div></div>' +
+        '<div class="dots">\uD83D\uDD12</div></button>';
+      return;
+    }
     h += '<button class="qrow" onclick="H.openQuestion(\'' + ch.id + '\',\'' + q.id + '\')">' +
       '<div class="qn">' + (i + 1) + '</div><div class="qt"><div>' + typeIcon[q.type] + ' ' + escHtml(q.title) + '</div>' +
       '<div class="s">' + escHtml(q.diff) + ' \u00B7 ' + q.tags.map(function(t){ return (JAVA_TAG_INFO[t] || {}).label || t; }).join(' \u00B7 ') + '</div></div>' +
       '<div class="dots">' + (done ? '\u2705' : (cold ? '\u2744\uFE0F redo cold' : '\u25B6')) + '</div></button>';
   });
-  if (idx + 1 < JAVA_CHAPTERS.length)
-    h += '<p class="note">' + (passed >= 7 ? '\u2705 Chapter ' + JAVA_CHAPTERS[idx + 1].n + ' is unlocked.' : 'Pass 7 of 10 to unlock Chapter ' + JAVA_CHAPTERS[idx + 1].n + ' \u2014 you have ' + passed + '.') + '</p>';
+  h += '<p class="note">Questions reveal one at a time: pass a question and the next challenge appears. Every chapter is open \u2014 start wherever your class is.</p>';
   return h;
 }
 function javaQNorm(q){ return {checks: q.checks.map(function(c){ return {type: 'output', expected: c.lines}; })}; }
@@ -4913,6 +4930,7 @@ window.H = {
   openQuestion: function(chId, qid){
     stopTimer();
     var f = javaQuestionById(qid); if (!f) return;
+    if (!javaQuestionOpen(f.ch, f.idx)) return;
     S = {screen: 'jquestion', chId: f.ch.id, qid: qid, qCode: null, qResult: null, qFails: 0,
          qShowHint: false, qSolutionSeen: false, qStudy: false, qSel: -1, qChecked: false,
          qWas: false, qColdCleared: false, orders: {}};
