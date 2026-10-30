@@ -1774,7 +1774,19 @@ const RAPID_DECKS = [
    ],
    "answer": 0,
    "why": "Every miss on the grocery list happened AFTER a correct computation existed. The core answer is halftime; the gate is the second half."
-  }
+  },
+{
+ "code": "df.groupby('country')['event_id'].value_counts()\n# event_id is unique — every event appears exactly once",
+ "q": "What comes back?",
+ "choices": [
+  "One row per (country, event_id) pair — 49,720 rows, every count 1",
+  "Events per country, sorted — a handful of rows",
+  "The number of distinct event_ids per country",
+  "It errors — value_counts cannot follow a groupby"
+ ],
+ "answer": 0,
+ "why": "value_counts counts the VALUES of whatever you point it at — here, event_ids inside each country. Point it at a unique ID and you get a phone book, not a summary. Events per country is df['country'].value_counts(). (Andrew hit this live, 2026-10-29.)"
+}
  ]
 }
 ];
@@ -5397,6 +5409,13 @@ const GROCERY_EXPLAIN = {
     "The computation — the part that feels like 'the problem' — was never the failure.",
     "What failed is the finish: the gate's UNITS and VERDICT questions, skipped after the core answer landed.",
     "Rule: done is a shape, not a feeling. The core answer is halftime; the gate is the second half."
+   ],
+   [
+    "Read the chain left to right: groupby('country') splits the frame into one group per country.",
+    "['event_id'] then selects the ID column inside each group.",
+    "value_counts() counts how often each distinct VALUE of that column occurs — within its group. It aggregated and sorted exactly as promised.",
+    "But event_id is unique: every value occurs exactly once, so you get all 49,720 (country, event_id) pairs with count 1 — a census, not a summary.",
+    "Rule: value_counts summarizes the column you POINT it at. Point it at the category (df['country'].value_counts()) for events per country; point it at a unique key and you get a phone book."
    ]
   ]
  }
