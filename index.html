@@ -4907,6 +4907,511 @@ if (typeof module !== 'undefined' && module.exports) module.exports = {JAVA_CHAP
 
 </script>
 <script>
+'use strict';
+/* Grocery List explainers: step-by-step walkthroughs shown when a card is
+   answered WRONG (the sticky one-liner in `why` still shows on every answer),
+   plus the untimed flag — Andrew's call (2026-10-29): the countdown comes off
+   these decks; pressure is not the drill here. Merged into RAPID_DECKS at load. */
+const GROCERY_EXPLAIN = {
+ "rapid-phrasebook": {
+  "untimed": true,
+  "steps": [
+   [
+    "The goal has two halves: read the file AND end up with a DataFrame.",
+    "pd.read_json does both in one verb — it parses the JSON and frames it.",
+    "json.load only parses: you get raw dicts and lists and still owe the DataFrame construction (that was the cell 01 detour).",
+    "pd.DataFrame('events.json') would try to build a frame out of the filename string itself.",
+    "Rule: loading a table is read_* — read_json, read_csv. The verb names the whole job."
+   ],
+   [
+    "You want a COUNT of duplicate rows.",
+    "duplicated() marks each repeated row True in a boolean mask.",
+    "sum() over a mask counts the Trues — mask + sum is the counting shape everywhere in pandas.",
+    "duplicated() alone hands you the mask, not the number; isna() answers a different question (missing, not repeated).",
+    "Rule: to count rows matching a condition, build the mask and sum it."
+   ],
+   [
+    "One row per event_id, and it must be the LATEST — order is the whole question.",
+    "df is already sorted by ts, so within each event_id the last row is the latest.",
+    "drop_duplicates('event_id', keep='last') keeps exactly that row and drops the earlier copies.",
+    "keep='first' keeps the EARLIEST (the cell 06 miss); bare drop_duplicates() only removes rows identical in every column.",
+    "Rule: dedupe on the key, keep chosen by sort order — sort first, then drop."
+   ],
+   [
+    "Translate the SQL first: GROUP BY country + COUNT(*) + ORDER BY count DESC is one combined move.",
+    "value_counts() is exactly that move packaged: it groups, counts, and sorts descending in a single call.",
+    "groupby('country').count() counts non-null values in EVERY other column — a wide table of per-column counts, unsorted.",
+    "Rule: 'how many per X, biggest first' is value_counts until proven otherwise."
+   ],
+   [
+    "Shares are counts divided by the total — a proportion per country.",
+    "value_counts(normalize=True) does the division internally and returns proportions that sum to 1.",
+    "Dividing value_counts() by 100 is the percent reflex misfiring — shares are proportions, not percents.",
+    ".apply(share) loops a function row by row for something the verb already does (the cell 21 habit).",
+    "Rule: share = value_counts(normalize=True). One switch, no arithmetic."
+   ],
+   [
+    "The operation must run on EVERY email at once — a whole column, not one string.",
+    "The .str accessor lifts string methods onto the whole Series: .str.split('@') splits all of them.",
+    "A second .str[1] picks element 1 (the domain) from each split.",
+    "df['email'].split('@') calls a str method on a Series — a Series has no .split. And .str.split('@')[1] would take ROW 1 of the result, not element 1 of each split.",
+    "Rule: column-wide string work goes through .str — twice if you split then pick."
+   ],
+   [
+    "You need a numeric 0/1 column, because later sums and means will feed on it.",
+    "~df['success'] flips the booleans: True where an event failed.",
+    "astype(int) converts True to 1 and False to 0 — now sum(is_fail) counts fails and mean(is_fail) is the rate.",
+    "~ alone leaves booleans (close, but not the 1/0 the goal named); int() on a whole Series raises TypeError.",
+    "Rule: flag = (the condition, or its flip).astype(int). The astype is what makes it arithmetic-ready."
+   ],
+   [
+    "Count rows where reason is missing.",
+    "isna() builds the mask — True exactly where the value is missing.",
+    "sum() counts the Trues: that is the number asked for.",
+    "len(mask) counts EVERY row, because the mask is as long as the column — the cell 07 trap in a new costume.",
+    "Rule: the count of a condition is mask.sum(). Always."
+   ],
+   [
+    "Translate: AVG(CASE WHEN fail THEN 1 ELSE 0 END) per country — an average of a 0/1 flag.",
+    "In pandas the flag already exists as is_fail; groupby('country') splits the rows by country.",
+    "['is_fail'].mean() averages the flag inside each group — the share of 1s IS the fail rate.",
+    "Grouping by is_fail instead answers the reverse question.",
+    "Rule: rate per group = groupby(key)[flag].mean(). Mean-of-flag is the rate."
+   ],
+   [
+    "Two conditions must hold at once: country is NL, and success is False.",
+    "Each comparison becomes its own mask — and each wears parentheses so it evaluates on its own.",
+    "& combines the masks element-wise; ~ flips the success mask to failures.",
+    "Without parentheses, & binds tighter than == and pandas tries 'NL' & a column of bools first — an error, not a filter.",
+    "Rule: (comparison) & (comparison), every time. Parentheses are not decoration."
+   ],
+   [
+    "A JOIN attaches columns from another table by matching a key.",
+    "merge(users, on='user_id') is the JOIN: rows pair up where user_id matches, and tier arrives as a new column.",
+    "join() aligns on the INDEX, not a named key; concat stacks rows vertically — neither pairs records by key.",
+    "Rule: a key-based join is merge. Say the SQL JOIN, then write merge."
+   ],
+   [
+    "You want the NAME of the biggest group, not the size of it.",
+    "value_counts() gives counts labeled by country.",
+    "idxmax() returns the LABEL of the maximum — the country's name.",
+    ".max() on the counts returns the biggest NUMBER (the count itself); df['country'].max() is alphabetical, not by count.",
+    "Rule: 'which group is biggest' = idxmax on the counts. Label versus value — keep them straight."
+   ],
+   [
+    "Latest event per user, and the WHOLE row must survive.",
+    "Sorted by ts, each user's last row is their latest event.",
+    "drop_duplicates('user_id', keep='last') on the full frame keeps that entire row — every column intact.",
+    "groupby('user_id').head(1) takes the FIRST row per user — the earliest, not the latest.",
+    "Rule: latest-per-key = sort, then drop_duplicates(key, keep='last') on the whole frame."
+   ],
+   [
+    "A random look means the rows must be drawn at random.",
+    "sample(5) draws 5 rows uniformly at random.",
+    "head(5) is deterministic — the FIRST five rows, every time (cells 10 and 15 reached for it when a sample or the whole frame was wanted).",
+    "df[0:5] is the same first five in slice clothing.",
+    "Rule: random rows = sample. head is a look at the top, nothing more."
+   ],
+   [
+    "'Top 5 by count' needs a ranking FIRST, then a cut.",
+    "value_counts() already returns countries ranked by count, biggest first.",
+    "head(5) then takes the top of that ranked list — head's one honest job.",
+    "Sorting by country NAME ranks alphabetically — head(5) of that is the A-countries, not the biggest.",
+    "Rule: head is only as good as the sort before it. Rank first, then head."
+   ],
+   [
+    "ts is a timestamp column; you want just the date part, for every row.",
+    ".dt is the datetime accessor — it lifts date and time pieces onto the whole Series.",
+    ".dt.date gives the calendar date of each timestamp.",
+    "A bare .date does not exist on a Series, and .str is for text — the wrong accessor family.",
+    "Rule: timestamps speak through .dt, strings through .str."
+   ],
+   [
+    "Distinct users per country — duplicates must collapse before counting.",
+    "groupby('country') forms the groups; ['user_id'] picks the column.",
+    "nunique() counts DISTINCT values inside each group.",
+    "size() would count rows (events), not users — they agree only when every user appears once (the cell 23 trap).",
+    "Rule: 'distinct per group' = groupby(key)[col].nunique()."
+   ],
+   [
+    "Rows per country — a row counts even if some of its other columns are null.",
+    "groupby('country').size() counts ROWS in each group, blind to nulls.",
+    "count() counts non-null values PER COLUMN — a country with null reasons would undercount there.",
+    "Rule: rows = size. Values present = count. Different questions, different verbs."
+   ],
+   [
+    "Missing reasons must become the literal string 'unknown', in the frame.",
+    "fillna('unknown') replaces every NaN in the column with that value.",
+    "Assigning the result back (df['reason'] = ...) is what makes it stick.",
+    "replace(None) is a deprecated one-argument form that mangles values instead of filling them — not a fill verb.",
+    "Rule: fill = fillna, and write it back."
+   ],
+   [
+    "Filter to rows whose reason text mentions 'password' — a text search inside a column.",
+    ".str.contains('password') tests each string and returns a mask.",
+    "na=False turns missing reasons into False instead of NaN — without it the mask is poisoned and the filter raises.",
+    "== '*password*' compares the whole string literally; SQL's LIKE does not exist here.",
+    "Rule: a text-in-column filter is .str.contains(..., na=False)."
+   ],
+   [
+    "A two-way count: countries down the side, outcomes across the top, counts in the cells.",
+    "pd.crosstab(df['country'], df['success']) builds exactly that contingency table in one call.",
+    "pivot needs a values column to aggregate — for pure counts, crosstab is the direct verb (cells 29-30).",
+    "Rule: counts of A x B = crosstab."
+   ],
+   [
+    "The 'user' data is trapped inside a dict in every record — you need it as columns.",
+    "pd.json_normalize walks each record and unpacks nested dicts into dotted columns like user.tier.",
+    "read_json loads JSON into a frame but does not flatten dicts sitting inside the records.",
+    "Rule: nested records = json_normalize. Flatten first, analyze second."
+   ],
+   [
+    "Renaming a column is metadata surgery: same data, new label.",
+    "rename(columns={'ctry': 'country'}) maps the old name to the new name precisely.",
+    "inplace=True makes the change stick to df itself.",
+    "df['country'] = df['ctry'] COPIES the column — now both exist, and the frame carries a duplicate of the data.",
+    "Rule: rename with the columns dict; never copy-and-leave."
+   ],
+   [
+    "After a groupby, the group key lives in the INDEX — code expecting a country column will not find one.",
+    "reset_index() moves the index back into a regular column named country.",
+    "The result is a plain table again: columns across the top, rows below.",
+    "Rule: groupby's finish is reset_index(). An index is not a column until you reset it."
+   ]
+  ]
+ },
+ "rapid-finish": {
+  "untimed": true,
+  "steps": [
+   [
+    "Start from the value: 0.388676 is a proportion — 0.388676 of the whole.",
+    "The % outfit does three jobs: multiplies by 100 (38.8676), rounds to the decimals named (one, so 38.9), and appends the % sign.",
+    "So the print is 38.9% — all the dressing done by the spec after the colon.",
+    "0.389% would be a :.3f look with a stray sign; 38.8676% skipped the rounding the outfit was asked for.",
+    "Rule: proportion + :.1% = dressed percent. Never multiply by hand."
+   ],
+   [
+    "Target: 38.9% from 0.388676 — the line must multiply, round to one decimal, and add the sign.",
+    "f\"{rate:.1%}\" does all three inside the outfit.",
+    "f\"{rate:.1f}%\" rounds and signs but never multiplies — it prints 0.4%.",
+    "round(rate, 1) + '%' tries to add a float to a string: TypeError before anything prints.",
+    "Rule: when the outfit can do the whole job, let it. Hand-rolled dressing is where the crashes live."
+   ],
+   [
+    "The value is 38.8676 — it is ALREADY a percent. The only jobs left: round to one decimal, add the sign.",
+    "f\"{pct:.1f}%\" does exactly those two: :.1f rounds, and the % is a literal character.",
+    "f\"{pct:.1%}\" would multiply AGAIN — 3886.8%, the classic mixed-convention blow-up.",
+    "Rule: one convention per problem. Proportions pair with :.1%; percents pair with :.1f%."
+   ],
+   [
+    "49720 with no outfit prints as one long digit string.",
+    "The comma outfit {n:,} groups digits in threes from the right: 49,720.",
+    "The number underneath is unchanged — grouping is pure look.",
+    "Rule: counts a human must read get the comma outfit. {n:,} every time."
+   ],
+   [
+    "47050289 bytes divided by 1,000,000 is 47.050289 MB.",
+    "The :.1f outfit rounds that to one decimal: 47.1.",
+    "The label ' MB' is a literal in the string — true only because the division happened.",
+    "47050289.0 MB is the undressed lie from cell 03: right digits, wrong unit.",
+    "Rule: convert the value, then dress it. The outfit never converts."
+   ],
+   [
+    "Two jobs again: divide by a million, then round to one decimal and label.",
+    "f\"{b/1_000_000:.1f} MB\" does the division INSIDE the hole and the rounding in the outfit.",
+    "f\"{b:.1f} MB\" dresses the raw byte count and labels it MB — cell 03's exact miss.",
+    "f\"{b/1_000_000} MB\" divides but skips the rounding outfit — 47.050289 MB.",
+    "Rule: the outfit will not divide for you. Your arithmetic in the hole, its rounding after the colon."
+   ],
+   [
+    "The timestamp holds 2026-10-24 17:34:12 — you want date plus hour:minute, no seconds.",
+    "In an f-string hole, a timestamp takes date codes after the colon: %Y-%m-%d %H:%M.",
+    "Each code picks one field; what you do not name does not print.",
+    "Rule: a timestamp in a hole wears date outfits — name the fields, get exactly those fields."
+   ],
+   [
+    "The target line has four pieces: name, total with commas, fails with commas, rate as a dressed percent.",
+    "Map each piece to an outfit: {name} plain, {total:,} and {fails:,} comma-dressed.",
+    "The rate is fails/total — a proportion — so it takes :.1% and dresses itself to 38.9%.",
+    ":.1f% on the rate would print 0.4% — the proportion was never multiplied.",
+    "Rule: build the line piece by piece, one outfit per piece. This is the exact line cells 24-25 print."
+   ],
+   [
+    "The NEXT calculation needs the rounded value — so the number itself must change, not its appearance.",
+    "round(x, 3) returns a new float, 0.389, ready for arithmetic.",
+    "f\"{x:.3f}\" returns a STRING that merely looks rounded — try doing math on it and you get TypeErrors.",
+    "Rule: round() changes the number (for later math); the outfit changes the look (for human eyes)."
+   ],
+   [
+    "The prompt asks for the SHAPE — a two-part answer: rows AND columns.",
+    "df.shape is the tuple (49720, 6) — both parts in one object.",
+    "len(df) answers rows only (49720) — cell 06 printed it and called it shape.",
+    "df.size multiplies them (298,320) — a third, different answer.",
+    "Rule: shape = df.shape. If the prompt says shape, print the tuple."
+   ],
+   [
+    "The prompt named the variable: fails. Graders — human or scripted — look for that exact name.",
+    "The code assigned the work to 'failed' instead. The computation is right; the deliverable is mislabeled.",
+    "The NAME question of the gate exists for exactly this: exact name assigned, everything named printed.",
+    "Cell 13 was the extreme version — fails was computed and never assigned at all.",
+    "Rule: the prompt's names are part of the spec. Copy them character for character."
+   ],
+   [
+    "A verdict may only quote numbers that were actually printed: NL 38.9%, DE 13.4%, and their counts.",
+    "'NL fails most of the two: 38.9% against DE's 13.4%' stays inside those numbers — legal.",
+    "'Worst country overall' claims the unprinted countries; 'about 40% of all events' claims an unprinted total; 'rose this week' claims an unprinted comparison.",
+    "Rule: if the number is not on screen, the sentence cannot say it. Print first, claim second."
+   ],
+   [
+    "0.0039 is a proportion: 0.0039 x 100 = 0.39 percent.",
+    "The :.1% outfit multiplies and rounds to one decimal: 0.4%.",
+    "If that looks surprisingly small, good — 0.0039 really is four-tenths of one percent.",
+    "Rule: trust the outfit's arithmetic. Tiny proportions dress to tiny percents."
+   ],
+   [
+    "rate holds 38.9 — a percent already (someone multiplied earlier).",
+    "The :.1% outfit multiplies by 100 again: 38.9 becomes 3890.0, then gets signed.",
+    "Nothing in the outfit knows the value was already dressed — conventions are your job.",
+    "Rule: a percent value and the % outfit must never meet. Pick one convention per problem and defend it."
+   ],
+   [
+    "round(0.388676, 3) is the float 0.389.",
+    "Adding a float and a string — 0.389 + '%' — is a type collision: TypeError, and nothing prints.",
+    "This is the Set 2 Q1 crash: glue is not formatting.",
+    "The f-string hole takes any type and formats it in place — f\"{0.388676:.1%}\" never glues.",
+    "Rule: never + a number to a string. Holes, not glue."
+   ],
+   [
+    "12.5 with a two-decimal outfit: the outfit pads to exactly two places — 12.50.",
+    "Padding is part of the look; the value is still 12.5.",
+    "Fixed-decimal outputs keep columns aligned and read as deliberate.",
+    "Rule: :.Nf means N decimals, zeros included. The outfit pads; it does not ask permission."
+   ],
+   [
+    "42 with outfit 03d: width 3, zero-filled, integer.",
+    "The value takes two characters; the outfit pads one zero in front: 042.",
+    "Zero-padding is how IDs, months, and days stay aligned — and sortable as text.",
+    "Rule: outfits control width and padding too — 0Nd pads a number to N wide with zeros."
+   ],
+   [
+    "The prompt wants the fail rate AS A PERCENT — a dressed number.",
+    "38.9% carries its unit on its face.",
+    "0.3887 is the same fact undressed — a proportion with no unit visible; 38.87 is a percent value with the sign missing.",
+    "Rule: the UNITS question — could a stranger tell what unit this number is in, from the print alone?"
+   ],
+   [
+    "t is a Series — one value per country, 6 countries.",
+    "A Series is one-dimensional, so its shape is a 1-tuple: (6,).",
+    "(6, 2) would be a two-column frame; (49720, 6) is the ORIGINAL df, not the grouped result.",
+    "Rule: SHAPE means the object in front of you now — grouped results are small objects with small shapes."
+   ],
+   [
+    "The miss: 0.3887 printed where 38.9% was asked — correct number, wrong unit dress.",
+    "Run the four gate questions in order and the FIRST one bites: UNITS — is it dressed?",
+    "SHAPE was fine, NAME was fine, VERDICT was not the issue — the proportion simply never got dressed.",
+    "Rule: the gate is not a vibe — each question catches a specific, named failure. UNITS catches this one."
+   ],
+   [
+    "The prompt named TWO outputs: the total and the fail count.",
+    "The code printed one. The other was computed and discarded — for the grader, it does not exist.",
+    "The NAME question covers printing too: everything named in the prompt reaches the screen.",
+    "Rule: count the prompt's deliverables before you run, then count your prints. The numbers must match."
+   ],
+   [
+    "47,050,289 is a byte count — forty-seven MILLION of them.",
+    "Slapping ' MB' on it claims the value is forty-seven million megabytes — off by a factor of a million.",
+    "The UNITS question compares magnitude to label: does this number's size match the unit it is wearing?",
+    "Rule: convert first (divide by 1,000,000, giving 47.1), then label. Labels are claims."
+   ],
+   [
+    "0.25 as a proportion; the outfit :.0% multiplies by 100 (25), rounds to zero decimals, and signs it.",
+    "Print: 25% — no decimal point, because zero decimals were ordered.",
+    "25.0% would be :.1% — one decimal. The digit before the % in the spec is the decimal count.",
+    "Rule: :.N% — N is decimals, and the multiplication always happens."
+   ],
+   [
+    "You want just the date: 2026-10-24.",
+    "strftime('%Y-%m-%d') formats the timestamp with exactly those fields.",
+    "f\"{ts}\" prints the full timestamp — date AND time, more than was asked.",
+    "Slicing str(ts) by character positions is hand-tailoring — one format change and the slice cuts the wrong cloth.",
+    "Rule: timestamps have their own outfit rack — strftime, or the colon codes in an f-string hole."
+   ]
+  ]
+ },
+ "rapid-traps": {
+  "untimed": true,
+  "steps": [
+   [
+    "mask holds 49,720 booleans, 8,336 of them True.",
+    "Counting the condition means counting the Trues.",
+    "sum() adds booleans as 1 and 0 — total 8,336.",
+    "len(mask) measures the mask's LENGTH — 49,720 — without looking inside (cell 07's miss, fixed in 08).",
+    "Rule: count a condition with mask.sum(). len counts everything, including the Falses."
+   ],
+   [
+    "len() asks one question only: how long is this object?",
+    "The mask is as long as the column: 49,720 entries.",
+    "It never inspects the values — Trues and Falses count the same toward length.",
+    "Print: 49720. The number of Trues was a different question (sum).",
+    "Rule: len = how many slots. sum = how many Trues. Do not let one answer the other."
+   ],
+   [
+    "Goal: rows that are NL AND failed — two masks combined.",
+    "Each comparison gets parentheses, so each mask is computed cleanly on its own.",
+    "& joins them element-wise; ~ flips success to failure.",
+    "The `and` versions cannot work at all — Python's and demands a single True/False, and a column has 49,720 of them.",
+    "Rule: (mask) & (mask), with ~ for NOT. That is the only shape a two-condition filter takes."
+   ],
+   [
+    "Python evaluates operators by precedence, and & outranks ==.",
+    "So 'NL' & df['success'] is attempted FIRST — a string ANDed with a column of booleans.",
+    "That operation is meaningless, so pandas raises before any comparison happens.",
+    "Parentheses reorder the evaluation: comparisons first, & last.",
+    "Rule: & eats ==. Parenthesize every comparison, or the expression parses into a different, broken one."
+   ],
+   [
+    "np.where in its choosing form needs three things: the condition, the value when true, the value when false.",
+    "This call supplies two — there is no if-false value.",
+    "numpy refuses rather than guess what the failures should be labeled.",
+    "Rule: condition, if-true, if-false — count three arguments before you run (cell 20)."
+   ],
+   [
+    "The condition is a whole column, so the choice happens per row.",
+    "Each row gets 'ok' or 'fail' stamped on it — 49,720 stamps.",
+    "The result is a full-length array, ready to assign as a new column.",
+    "It is NOT a summary — no counting happened anywhere.",
+    "Rule: np.where labels rows; it never aggregates them."
+   ],
+   [
+    "The prompt wants RANDOM rows — unpredictability is the requirement.",
+    "head(5) deterministically returns rows 0-4, the same five every run.",
+    "A spot check on the first five rows can hide everything wrong further down.",
+    "sample(5) draws at random — the honest spot check (cells 10 and 15).",
+    "Rule: head = first. sample = random. The prompt's word decides."
+   ],
+   [
+    "value_counts() returns countries already ranked — biggest count first.",
+    "head(5) on a RANKED list takes the top five of the ranking.",
+    "The legality comes from the sort before it, not from head itself.",
+    "Rule: head is top-N only when something already sorted the list. Otherwise it is just the first rows in a costume."
+   ],
+   [
+    "groupby put country in the index — the result's rows are LABELED by country, but no country column exists.",
+    "reset_index() demotes the index back into an ordinary column.",
+    "Now country can be selected, merged on, printed as a column — a plain table.",
+    "set_index would push it further INTO the index — the opposite direction.",
+    "Rule: groupby's last step is reset_index(). Index in, table out."
+   ],
+   [
+    "Three candidate counts: rows = 8,336; rows with a user_id present = fewer (some are null); distinct users = 7,900.",
+    "The question asks for ROWS.",
+    "groupby('country').size() counts rows per group, ignoring nulls entirely.",
+    "count() would skip the null user_ids; nunique would collapse to distinct users.",
+    "Rule: match the verb to the noun — rows: size; present values: count; distinct: nunique."
+   ],
+   [
+    "Distinct users per country: the same user appearing 50 times still counts once.",
+    "groupby forms the countries; ['user_id'] picks the column; nunique counts distinct values within each group.",
+    "size() counts events, not users — cell 23's swap, where row counts got reported as user counts.",
+    "Rule: the word 'distinct' in a prompt is nunique's name being called."
+   ],
+   [
+    "Three results wanted, in one pass: total, fails, rate — per country.",
+    "Write each as a shopping-list line: name = (column, verb). total = ('event_id', 'count').",
+    "fails = ('is_fail', 'sum') — summing the flag counts the 1s. rate = ('is_fail', 'mean') — the mean of the flag is the share.",
+    "agg(['count', 'sum', 'mean']) would apply every verb to every column — a grid of nonsense, not three named results.",
+    "Rule: agg is a shopping list, not a new verb. You already know every verb on it (cell 25)."
+   ],
+   [
+    "A 0/1 flag averaged: (1+1+0+1)/4 = 0.75 — the share of 1s.",
+    "That share IS the rate. No division step exists because the mean already is the division.",
+    "agg's verbs only touch raw columns — a fails/total division cannot be expressed inside agg, and does not need to be.",
+    "Rule: inside agg, rate = mean of the flag. It is the AVG(CASE WHEN...) you already write in SQL."
+   ],
+   [
+    "Smallest and largest bytes — two verbs, one column.",
+    "The shopping list allows the same column on two lines under two names: lo = ('bytes', 'min'), hi = ('bytes', 'max').",
+    "Each line is still just (column, verb) — nothing new to learn.",
+    "Rule: one line per RESULT, not per column. Columns can repeat; names cannot."
+   ],
+   [
+    "agg built the table, but three finish items remain: country is the index, rows are unordered, the rate is a raw proportion.",
+    "reset_index() returns country to a column.",
+    "sort_values('rate', ascending=False) puts the worst first.",
+    "Printing the rate with :.1% dresses it. The gate runs on agg output exactly like anything else.",
+    "Rule: the shopping list builds; the gate finishes. Both halves, every time."
+   ],
+   [
+    "Latest event per user — and the deliverable is whole ROWS, all columns.",
+    "drop_duplicates('user_id', keep='last') on the sorted full frame keeps entire records.",
+    "groupby('user_id')['ts'].max() returns (user, ts) PAIRS — the old P4 trap: right values, wrong shape.",
+    "Selecting just [['user_id', 'ts']] before dropping has the same disease — the record was amputated before the drop.",
+    "Rule: keep whole records by dropping duplicates on the whole frame. Never narrow first."
+   ],
+   [
+    "keep speaks about position in the CURRENT order — nothing else.",
+    "Sorted ascending by ts, the first row per user is the earliest event.",
+    "keep='first' keeps exactly that. If you wanted latest, the word is 'last' — or sort descending.",
+    "Rule: first and last mean first and last AS SORTED. The sort is the meaning."
+   ],
+   [
+    "duplicated() normally spares the first copy — it marks only the repeats.",
+    "keep=False marks EVERY member of a duplicate family — the original and the copies alike.",
+    "That is the audit you want when hunting all the rows involved in a duplication, not just the extras.",
+    "Rule: keep=False flags the whole family. keep='first'/'last' flag all but one."
+   ],
+   [
+    "Count the events whose reason is missing.",
+    "isna() marks them True in a mask.",
+    "sum() counts the Trues — the same mask-then-sum shape as every count in this deck.",
+    "Rule: missing-count = column.isna().sum(). One line, no loop (cell 07)."
+   ],
+   [
+    "Python's `and` must decide ONE True/False for the whole expression.",
+    "A mask has 49,720 truth values — asking for its single truth is ambiguous, so pandas raises ValueError.",
+    "& never asks that question — it combines element by element.",
+    "Rule: between masks, the operator is &, never `and`. (Parentheses still required.)"
+   ],
+   [
+    "keep='last' means 'last in the frame's CURRENT order'.",
+    "Sorted by user_id, the last row per user is whichever event happens to sit last in that order — arbitrary in time.",
+    "Sorting by ts first makes 'last' coincide with 'latest'.",
+    "drop_duplicates does not sort for you — the meaning of keep is entirely the order you hand it.",
+    "Rule: sort by time, THEN drop keep='last'. Order is the argument."
+   ],
+   [
+    "count() answers, per column: how many values are PRESENT?",
+    "1,995 rows have no reason — those rows contribute nothing to the reason column's count.",
+    "So a groupby count shows smaller numbers for reason than for event_id — correctly, for the question it answers.",
+    "If the question was ROWS, size() was the verb.",
+    "Rule: count = present values. It is not a row count wearing a groupby costume."
+   ],
+   [
+    "Printed evidence: exactly two rates — NL 38.9%, DE 13.4%.",
+    "'Highest of ALL countries' asserts a ranking over countries that were never printed.",
+    "The other three sentences only restate or compare the two printed numbers — legal.",
+    "Rule: a verdict's universe is the printed output. Unprinted countries do not exist for the claim."
+   ],
+   [
+    "Re-read the crime scene: every number correct; the percent undressed; the verdict sentence missing.",
+    "The computation — the part that feels like 'the problem' — was never the failure.",
+    "What failed is the finish: the gate's UNITS and VERDICT questions, skipped after the core answer landed.",
+    "Rule: done is a shape, not a feeling. The core answer is halftime; the gate is the second half."
+   ]
+  ]
+ }
+};
+if (typeof RAPID_DECKS !== 'undefined'){
+  RAPID_DECKS.forEach(function(D){
+    var G = GROCERY_EXPLAIN[D.id]; if (!G) return;
+    D.untimed = !!G.untimed;
+    D.cards.forEach(function(c, i){ if (G.steps[i]) c.steps = G.steps[i]; });
+  });
+}
+if (typeof module !== 'undefined' && module.exports) module.exports = {GROCERY_EXPLAIN};
+
+</script>
+<script>
 (function(){
 'use strict';
 /* Code Dojo v2 — DE Interview Prep (Python only). All state on-device. */
@@ -5143,7 +5648,7 @@ function render(){
       if (el) el.textContent = '⏱ ' + elapsedStr();
     }, 1000);
   }
-  if (S.screen === 'rapid' && !S.finished && !S.checked){
+  if (S.screen === 'rapid' && !S.finished && !S.checked && S.deadline){
     timerInt = setInterval(function(){
       var left = Math.max(0, S.deadline - Date.now());
       var el = document.getElementById('cdText');
@@ -5179,7 +5684,7 @@ function sectionHtml(coll){
 var RAPID_RUN = 12, RAPID_SECONDS = 10;
 function rapidDeck(id){ for (var i = 0; i < RAPID_DECKS.length; i++) if (RAPID_DECKS[i].id === id) return RAPID_DECKS[i]; return null; }
 function rapidSectionHtml(){
-  var h = '<div class="unithead">⚡ Rapid Fire — Operator Fluency</div><p class="note" style="margin:-4px 2px 10px">' + RAPID_RUN + ' cards, ' + RAPID_SECONDS + ' seconds each, shuffled every run. Wrong answers land in your review queue.</p><div class="cards">';
+  var h = '<div class="unithead">⚡ Rapid Fire — Operator Fluency</div><p class="note" style="margin:-4px 2px 10px">' + RAPID_RUN + ' cards, ' + RAPID_SECONDS + ' seconds each, shuffled every run. Wrong answers land in your review queue. (The Grocery List decks above run untimed, with a step-by-step explainer on every miss.)</p><div class="cards">';
   RAPID_DECKS.forEach(function(D){
     var best = state.rapid.best[D.id] || 0, plays = state.rapid.plays[D.id] || 0;
     h += '<button class="pathcard" onclick="H.rapidStart(\'' + D.id + '\')">' +
@@ -5201,7 +5706,7 @@ function grocerySectionHtml(){
     '<p style="margin:6px 0"><i>The core answer is halftime; the gate is the second half. Done is a shape, not a feeling.</i></p>' +
     codeBlock('rate = 0.388676\nprint(f"{rate:.1%}")        # 38.9% \u2014 the outfit multiplies\nprint(f"{pct:.1f}%")         # pct already a percent: 38.9%\nprint(f"{n:,}")              # 49,720\nprint(f"{b/1_000_000:.1f} MB")  # 47.1 MB \u2014 the division is yours\n\n# the line cells 24-25 actually print:\nprint(f"{name} \u2014 {total:,} \u2014 {fails:,} \u2014 {fails/total:.1%}")') +
     '<p style="margin:6px 0"><b>Named agg is a shopping list:</b> <code>agg(total=(\'event_id\',\'count\'), fails=(\'is_fail\',\'sum\'), rate=(\'is_fail\',\'mean\'))</code> \u2014 each line is <i>name = (column, a verb you already know)</i>, and rate inside agg is just mean again.</p>' +
-    '<p class="note" style="margin-bottom:0">Cold retest scoreboard lives in the notebook (cells 03 \u00B7 05 \u00B7 06 \u00B7 07 \u00B7 10 \u00B7 13 \u00B7 15 \u00B7 20 \u00B7 24 \u2014 clears only on a clean cold pass). The decks below are the in-app reps: 12 cards a run, 10 seconds each, misses go to your review queue.</p></div>';
+    '<p class="note" style="margin-bottom:0">Cold retest scoreboard lives in the notebook (cells 03 \u00B7 05 \u00B7 06 \u00B7 07 \u00B7 10 \u00B7 13 \u00B7 15 \u00B7 20 \u00B7 24 \u2014 clears only on a clean cold pass). The decks below are the in-app reps: runs of 12, NO timer on these three decks \u2014 and every miss comes with a step-by-step explainer of why. Misses still go to your review queue.</p></div>';
   h += '<div class="cards">';
   GROCERY_DECK_IDS.forEach(function(id){
     var D = rapidDeck(id); if (!D) return;
@@ -5768,8 +6273,12 @@ function viewRapid(){
     return h;
   }
   var card = D.cards[S.order[S.pos]];
-  h += '<div class="note">Card ' + (S.pos + 1) + ' of ' + S.order.length + ' · ⭐ score ' + S.score + (S.streak > 1 ? ' · 🔥 streak ' + S.streak : '') + ' · <span id="cdText">' + RAPID_SECONDS.toFixed(1) + 's</span></div>';
-  h += '<div class="progressbar"><div id="cdBar" style="width:100%"></div></div>';
+  if (D.untimed){
+    h += '<div class="note">Card ' + (S.pos + 1) + ' of ' + S.order.length + ' · ⭐ score ' + S.score + (S.streak > 1 ? ' · 🔥 streak ' + S.streak : '') + ' · 🕊️ no timer — take the time you need</div>';
+  } else {
+    h += '<div class="note">Card ' + (S.pos + 1) + ' of ' + S.order.length + ' · ⭐ score ' + S.score + (S.streak > 1 ? ' · 🔥 streak ' + S.streak : '') + ' · <span id="cdText">' + RAPID_SECONDS.toFixed(1) + 's</span></div>';
+    h += '<div class="progressbar"><div id="cdBar" style="width:100%"></div></div>';
+  }
   h += '<div class="card">' + codeBlock(card.code) + '<p><b>' + escHtml(card.q) + '</b></p>';
   h += (S.cardPerm || card.choices.map(function(_, i){ return i; })).map(function(origIdx, dispIdx){
     var cls = '';
@@ -5780,6 +6289,10 @@ function viewRapid(){
   }).join('');
   if (S.checked){
     h += feedbackHtml(S.wasCorrect, (S.timedOut ? '⏰ Time. ' : '') + card.why);
+    if (!S.wasCorrect && card.steps){
+      h += '<div style="background:#fffbeb;border:2px solid #f59e0b;border-radius:12px;padding:12px 14px;margin:10px 0"><b>🧭 Why — step by step</b><ol style="margin:8px 0 2px;padding-left:20px">' +
+        card.steps.map(function(st){ return '<li style="margin-bottom:6px">' + escHtml(st) + '</li>'; }).join('') + '</ol></div>';
+    }
     h += '<button class="btn" onclick="H.rapidNext()">' + (S.pos + 1 >= S.order.length ? 'See results →' : 'Next card →') + '</button>';
   }
   return h + '</div>';
@@ -5803,7 +6316,7 @@ window.H = {
     S = {screen: 'rapid', deckId: deckId, order: idx.slice(0, RAPID_RUN), pos: 0,
          score: 0, streak: 0, bestStreak: 0, earned: 0,
          selected: -1, checked: false, wasCorrect: false, timedOut: false, finished: false,
-         deadline: Date.now() + RAPID_SECONDS * 1000, startedAt: Date.now()};
+         deadline: D.untimed ? null : Date.now() + RAPID_SECONDS * 1000, startedAt: Date.now()};
     S.cardPerm = shuffledIdx(D.cards[S.order[0]].choices.length);
     render(); window.scrollTo(0, 0);
   },
@@ -5832,8 +6345,9 @@ window.H = {
       save(); S.finished = true;
     } else {
       S.pos++; S.selected = -1; S.checked = false; S.wasCorrect = false; S.timedOut = false;
-      S.deadline = Date.now() + RAPID_SECONDS * 1000;
-      var D = rapidDeck(S.deckId); S.cardPerm = shuffledIdx(D.cards[S.order[S.pos]].choices.length);
+      var D = rapidDeck(S.deckId);
+      S.deadline = D.untimed ? null : Date.now() + RAPID_SECONDS * 1000;
+      S.cardPerm = shuffledIdx(D.cards[S.order[S.pos]].choices.length);
     }
     render(); window.scrollTo(0, 0);
   },
