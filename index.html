@@ -888,6 +888,895 @@ const RAPID_DECKS = [
     {code: "d = {}\nd['new'] = 5\nprint('new' in d)", q: 'What prints?', choices: ['False', '5', 'True', 'None'], answer: 2, why: 'Assigning to a brand-new key CREATES the pair — no declaration needed. Then `in` finds the key.', run: "d = {}\nd['new'] = 5\nprint('new' in d)", expect: 'True'}
   ]
 }
+,
+{
+ "id": "rapid-phrasebook",
+ "icon": "🐼",
+ "title": "Pandas Phrasebook",
+ "tagline": "SQL in your head, pandas out of your hands — say it in SQL, then pick the verb",
+ "cards": [
+  {
+   "code": "# events.json holds the auth-events table\n# GOAL: load it into a DataFrame named df",
+   "q": "Which line does it?",
+   "choices": [
+    "df = pd.read_json('events.json')",
+    "df = json.load(open('events.json'))",
+    "df = pd.DataFrame('events.json')",
+    "df = pd.read_table('events.json')"
+   ],
+   "answer": 0,
+   "why": "read_json loads AND frames in one verb. json.load hands you raw dicts and leaves the framing to you — that was cell 01."
+  },
+  {
+   "code": "# GOAL: how many rows are exact duplicates?",
+   "q": "Which line is the dup audit?",
+   "choices": [
+    "df.duplicated().sum()",
+    "df.duplicated()",
+    "df.isna().sum()",
+    "df.count_duplicates()"
+   ],
+   "answer": 0,
+   "why": "duplicated() returns a mask; sum() counts its Trues. The audit is one line — no set, no loop (cell 05)."
+  },
+  {
+   "code": "# df is sorted by ts. GOAL: one row per event_id — the LATEST one",
+   "q": "Which line?",
+   "choices": [
+    "df.drop_duplicates('event_id', keep='last')",
+    "df.drop_duplicates('event_id', keep='first')",
+    "df.drop_duplicates()",
+    "df.distinct('event_id')"
+   ],
+   "answer": 0,
+   "why": "Sort first, then drop with keep='last'. It is SQL's QUALIFY ROW_NUMBER() = 1 wearing pandas clothes (cell 06)."
+  },
+  {
+   "code": "# GOAL: events per country, biggest first\n# SQL: SELECT country, COUNT(*) ... GROUP BY country ORDER BY 2 DESC",
+   "q": "Which line?",
+   "choices": [
+    "df['country'].value_counts()",
+    "df.groupby('country').count()",
+    "df.count('country')",
+    "df['country'].count_values()"
+   ],
+   "answer": 0,
+   "why": "value_counts IS groupby + count + sort in one verb. Rebuilding it by hand was cells 21-22."
+  },
+  {
+   "code": "# GOAL: each country's SHARE of all events (0.39-style proportions)",
+   "q": "Which line?",
+   "choices": [
+    "df['country'].value_counts(normalize=True)",
+    "df['country'].value_counts() / 100",
+    "df.groupby('country').share()",
+    "df['country'].apply(share)"
+   ],
+   "answer": 0,
+   "why": "normalize=True is the share switch — no apply, no manual division (cell 21)."
+  },
+  {
+   "code": "# GOAL: the domain of every email in df['email'], as a new column",
+   "q": "Which line?",
+   "choices": [
+    "df['email'].str.split('@').str[1]",
+    "df['email'].split('@')[1]",
+    "df['email'].str.split('@')[1]",
+    "df['email'].apply(split)"
+   ],
+   "answer": 0,
+   "why": ".str runs the string op on the WHOLE column at once. Plain .split is a per-string method — on a Series it dies (cell 18)."
+  },
+  {
+   "code": "# GOAL: a new column is_fail — 1 where success is False, else 0",
+   "q": "Which line?",
+   "choices": [
+    "df['is_fail'] = (~df['success']).astype(int)",
+    "df['is_fail'] = ~df['success']",
+    "df['is_fail'] = int(~df['success'])",
+    "df['is_fail'] = df['success'].apply(lambda s: 1)"
+   ],
+   "answer": 0,
+   "why": "~ flips the bools; astype(int) turns them into the 1/0 flag that every later sum and mean feeds on. No apply needed."
+  },
+  {
+   "code": "# GOAL: how many events have NO reason recorded?",
+   "q": "Which line?",
+   "choices": [
+    "df['reason'].isna().sum()",
+    "df['reason'].isna()",
+    "len(df['reason'].isna())",
+    "df['reason'].count_nulls()"
+   ],
+   "answer": 0,
+   "why": "isna() gives the mask, sum() counts the Trues. len(mask) would count every row in the table (the cell 07 trap)."
+  },
+  {
+   "code": "# GOAL: fail rate per country\n# SQL: SELECT country, AVG(CASE WHEN NOT success THEN 1 ELSE 0 END)",
+   "q": "Which line?",
+   "choices": [
+    "df.groupby('country')['is_fail'].mean()",
+    "df.groupby('country')['is_fail'].rate()",
+    "df.groupby('is_fail')['country'].mean()",
+    "df['country'].groupby(df['is_fail']).mean()"
+   ],
+   "answer": 0,
+   "why": "Mean of a 0/1 flag IS the rate — the SQL AVG-of-CASE in a single verb."
+  },
+  {
+   "code": "# GOAL: just the failed events from NL",
+   "q": "Which line?",
+   "choices": [
+    "df[(df['country'] == 'NL') & (~df['success'])]",
+    "df[df['country'] == 'NL' & df['success'] == False]",
+    "df.filter(country='NL', success=False)",
+    "df[df['country'] = 'NL' and not df['success']]"
+   ],
+   "answer": 0,
+   "why": "Every comparison wears parentheses and & is the AND — & grabs its neighbours before == ever runs (cell 20)."
+  },
+  {
+   "code": "# users table + events table.\n# GOAL: attach each event's user tier — SQL: JOIN users USING(user_id)",
+   "q": "Which line?",
+   "choices": [
+    "events.merge(users, on='user_id')",
+    "events.join(users)",
+    "events.append(users)",
+    "pd.concat([events, users])"
+   ],
+   "answer": 0,
+   "why": "merge is the JOIN verb. join() aligns on the INDEX, concat stacks rows — neither joins on a key."
+  },
+  {
+   "code": "# GOAL: the country with the most events, as a string",
+   "q": "Which line?",
+   "choices": [
+    "df['country'].value_counts().idxmax()",
+    "df['country'].value_counts().max()",
+    "df['country'].max()",
+    "df['country'].sort_values().iloc[-1]"
+   ],
+   "answer": 0,
+   "why": "idxmax returns the LABEL of the biggest count. .max() on the counts returns the count itself — the number, not the name."
+  },
+  {
+   "code": "# df is sorted by ts. GOAL: each user's LATEST event, the whole row",
+   "q": "Which line?",
+   "choices": [
+    "df.drop_duplicates('user_id', keep='last')",
+    "df.groupby('user_id').head(1)",
+    "df.drop_duplicates('user_id')",
+    "df['user_id'].drop_duplicates()"
+   ],
+   "answer": 0,
+   "why": "Sort, then drop, keep='last' — and because you drop on the whole frame, the record survives whole (cell 35's whole job)."
+  },
+  {
+   "code": "# GOAL: a random 5-row look at df",
+   "q": "Which line?",
+   "choices": [
+    "df.sample(5)",
+    "df.head(5)",
+    "df.random(5)",
+    "df[0:5]"
+   ],
+   "answer": 0,
+   "why": "head() is the FIRST five — a look, not a sample. sample() is the random draw (cells 10 and 15)."
+  },
+  {
+   "code": "# GOAL: the 5 countries with the most events",
+   "q": "Which line?",
+   "choices": [
+    "df['country'].value_counts().head(5)",
+    "df.sort_values('country').head(5)",
+    "df['country'].head(5)",
+    "df.nlargest(5, 'country')"
+   ],
+   "answer": 0,
+   "why": "head's one honest job: top-N AFTER a sort — and the sort is built into value_counts (cell 26)."
+  },
+  {
+   "code": "# GOAL: a new column with just the DATE of each event (ts is a timestamp)",
+   "q": "Which line?",
+   "choices": [
+    "df['ts'].dt.date",
+    "df['ts'].date",
+    "df['ts'].str.date",
+    "df['ts'].apply(date)"
+   ],
+   "answer": 0,
+   "why": ".dt is the timestamp accessor — .str's sibling for dates (the cells 31-36 toolkit)."
+  },
+  {
+   "code": "# GOAL: distinct users per country",
+   "q": "Which line?",
+   "choices": [
+    "df.groupby('country')['user_id'].nunique()",
+    "df.groupby('country')['user_id'].size()",
+    "df['country'].nunique()",
+    "df.groupby('country')['user_id'].count_distinct()"
+   ],
+   "answer": 0,
+   "why": "nunique counts DISTINCT values. size counts rows — they agree only when the key was already unique (cell 23)."
+  },
+  {
+   "code": "# GOAL: ROWS per country — counting every row, even where other columns are null",
+   "q": "Which line?",
+   "choices": [
+    "df.groupby('country').size()",
+    "df.groupby('country').count()",
+    "df['country'].size()",
+    "df.groupby('country').len()"
+   ],
+   "answer": 0,
+   "why": "size counts ROWS. count() counts non-null values per column — a different animal wearing a similar name."
+  },
+  {
+   "code": "# GOAL: a missing reason becomes the string 'unknown'",
+   "q": "Which line?",
+   "choices": [
+    "df['reason'] = df['reason'].fillna('unknown')",
+    "df['reason'].fill('unknown')",
+    "df['reason'] = df['reason'].replace(None)",
+    "df.fillna('reason', 'unknown')"
+   ],
+   "answer": 0,
+   "why": "fillna is the verb — and assign the result back, or it evaporates. replace(None) is a deprecated one-argument form that mangles values instead of filling them."
+  },
+  {
+   "code": "# GOAL: events whose reason mentions 'password'",
+   "q": "Which line?",
+   "choices": [
+    "df[df['reason'].str.contains('password', na=False)]",
+    "df[df['reason'].contains('password')]",
+    "df.filter('reason like password')",
+    "df[df['reason'] == '*password*']"
+   ],
+   "answer": 0,
+   "why": ".str.contains with na=False — without it, the null reasons poison the mask with NaNs and the filter errors."
+  },
+  {
+   "code": "# GOAL: a country x outcome count table (rows = country, cols = success)",
+   "q": "Which line?",
+   "choices": [
+    "pd.crosstab(df['country'], df['success'])",
+    "df.pivot('country', 'success')",
+    "df.groupby(['country', 'success']).table()",
+    "df['country'].crosstab(df['success'])"
+   ],
+   "answer": 0,
+   "why": "crosstab is the two-way count table in one call — the cells 29-30 verb."
+  },
+  {
+   "code": "# Events arrived as nested JSON: each record has a 'user' dict inside it.\n# GOAL: flatten it, so user.tier becomes a column",
+   "q": "Which line?",
+   "choices": [
+    "pd.json_normalize(records)",
+    "pd.read_json(records)",
+    "df.flatten()",
+    "pd.DataFrame(records).explode('user')"
+   ],
+   "answer": 0,
+   "why": "json_normalize unpacks nested dicts into dotted columns — the cells 37-44 opener."
+  },
+  {
+   "code": "# GOAL: rename the column 'ctry' to 'country', in df itself",
+   "q": "Which line?",
+   "choices": [
+    "df.rename(columns={'ctry': 'country'}, inplace=True)",
+    "df['country'] = df['ctry']",
+    "df.columns.rename('ctry', 'country')",
+    "df.rename('ctry', 'country')"
+   ],
+   "answer": 0,
+   "why": "rename takes the columns dict. Copying the column over leaves BOTH columns in the frame."
+  },
+  {
+   "code": "# After a groupby, country is the result's INDEX, not a column.\n# GOAL: a plain table with country as a column again",
+   "q": "Which line?",
+   "choices": [
+    "result.reset_index()",
+    "result.to_frame()",
+    "result.unindex()",
+    "result.columns.reset()"
+   ],
+   "answer": 0,
+   "why": "groupby hands back an index, not a table — reset_index() is the finish (cells 24 and 28)."
+  }
+ ]
+},
+{
+ "id": "rapid-finish",
+ "icon": "👔",
+ "title": "Dress the Answer",
+ "tagline": "the finish gate + the formatting wardrobe — units, shape, name, verdict",
+ "cards": [
+  {
+   "code": "rate = 0.388676\nprint(f\"{rate:.1%}\")",
+   "q": "What prints?",
+   "choices": [
+    "38.9%",
+    "0.389%",
+    "38.8676%",
+    "0.388676%"
+   ],
+   "answer": 0,
+   "why": "The % outfit multiplies by 100, rounds to one decimal, and adds the sign. The whole job in one spec."
+  },
+  {
+   "code": "rate = 0.388676",
+   "q": "Which line prints 38.9%?",
+   "choices": [
+    "print(f\"{rate:.1%}\")",
+    "print(f\"{rate:.1f}%\")",
+    "print(round(rate, 1) + '%')",
+    "print(f\"{rate}%\")"
+   ],
+   "answer": 0,
+   "why": ":.1f% prints 0.4% — the value was never multiplied. And round() + '%' glues a float to a string: TypeError."
+  },
+  {
+   "code": "pct = 38.8676   # already a percent",
+   "q": "Which line prints 38.9%?",
+   "choices": [
+    "print(f\"{pct:.1f}%\")",
+    "print(f\"{pct:.1%}\")",
+    "print(f\"{pct:.1f}\")",
+    "print(pct + '%')"
+   ],
+   "answer": 0,
+   "why": "One convention per problem: an already-percent value takes :.1f with a literal %. The :.1% outfit on it prints 3886.8%."
+  },
+  {
+   "code": "n = 49720\nprint(f\"{n:,}\")",
+   "q": "What prints?",
+   "choices": [
+    "49,720",
+    "49720",
+    "49.720",
+    "4,9720"
+   ],
+   "answer": 0,
+   "why": "The comma outfit groups thousands. It changes the look only — n is still 49720 underneath."
+  },
+  {
+   "code": "b = 47050289\nprint(f\"{b/1_000_000:.1f} MB\")",
+   "q": "What prints?",
+   "choices": [
+    "47.1 MB",
+    "47050289.0 MB",
+    "47.0 MB",
+    "0.0 MB"
+   ],
+   "answer": 0,
+   "why": "47,050,289 bytes is 47.05 MB; the :.1f outfit rounds the look to 47.1. The division happened outside the outfit — it always does."
+  },
+  {
+   "code": "b = 47050289",
+   "q": "Which line prints 47.1 MB?",
+   "choices": [
+    "print(f\"{b/1_000_000:.1f} MB\")",
+    "print(f\"{b:.1f} MB\")",
+    "print(f\"{b/1_000_000} MB\")",
+    "print(str(b) + ' MB')"
+   ],
+   "answer": 0,
+   "why": "The outfit will not divide for you — /1_000_000 is yours (cell 03, where bytes got labeled MB raw)."
+  },
+  {
+   "code": "ts = pd.Timestamp('2026-10-24 17:34:12')\nprint(f\"{ts:%Y-%m-%d %H:%M}\")",
+   "q": "What prints?",
+   "choices": [
+    "2026-10-24 17:34",
+    "2026-10-24 17:34:12",
+    "10-24-2026 17:34",
+    "Timestamp('2026-10-24')"
+   ],
+   "answer": 0,
+   "why": "A timestamp in an f-string hole takes date outfits after the colon — %Y-%m-%d %H:%M picks exactly the fields you name."
+  },
+  {
+   "code": "name, total, fails = 'NL', 8336, 3240",
+   "q": "Which line prints:  NL — 8,336 — 3,240 — 38.9% ?",
+   "choices": [
+    "print(f\"{name} — {total:,} — {fails:,} — {fails/total:.1%}\")",
+    "print(name, total, fails, fails/total)",
+    "print(f\"{name} — {total} — {fails} — {fails/total}%\")",
+    "print(f\"{name} — {total:,} — {fails:,} — {fails/total:.1f}%\")"
+   ],
+   "answer": 0,
+   "why": "Comma outfits for the counts, the :.1% outfit for the rate. This IS the output line of cells 24-25 — pre-build it and the finish is free."
+  },
+  {
+   "code": "x = 0.388676",
+   "q": "The NEXT calculation needs x rounded to 3 decimals. Which line?",
+   "choices": [
+    "x = round(x, 3)",
+    "print(f\"{x:.3f}\")",
+    "x = f\"{x:.3f}\"",
+    "x.outfit(3)"
+   ],
+   "answer": 0,
+   "why": "round() changes the NUMBER — that is what later math needs. The outfit changes only the look, and hands back a string."
+  },
+  {
+   "code": "# df has 49,720 rows and 6 columns.\n# The prompt asks: 'print the shape'",
+   "q": "Which line?",
+   "choices": [
+    "print(df.shape)",
+    "print(len(df))",
+    "print(df.size)",
+    "print(df.count())"
+   ],
+   "answer": 0,
+   "why": "shape is the tuple (49720, 6). len is rows only; size is rows x cols (298,320). Cell 06 printed len and called it shape."
+  },
+  {
+   "code": "# Prompt: 'Assign the failed events to a variable named fails and print its length.'\nfailed = df[~df['success']]\nprint(len(failed))",
+   "q": "What does the gate say?",
+   "choices": [
+    "Off-spec: the variable is named failed, not fails — assign the EXACT name asked",
+    "All good — the count printed",
+    "It needs a % sign",
+    "It needs a reset_index()"
+   ],
+   "answer": 0,
+   "why": "The NAME question. Graders look for the name the prompt named; cell 13 computed fails and never assigned it at all."
+  },
+  {
+   "code": "# Printed so far: NL 3,240 fails of 8,336 (38.9%); DE 1,102 of 8,225 (13.4%)",
+   "q": "Which verdict is legal?",
+   "choices": [
+    "'NL fails most of the two: 38.9% against DE's 13.4%'",
+    "'NL is the worst country overall'",
+    "'About 40% of all events fail'",
+    "'Failures rose this week'"
+   ],
+   "answer": 0,
+   "why": "A verdict quotes ONLY numbers already on screen. No other country, total, or week was printed — so none can be claimed."
+  },
+  {
+   "code": "print(f\"{0.0039:.1%}\")",
+   "q": "What prints?",
+   "choices": [
+    "0.4%",
+    "0.0039%",
+    "3.9%",
+    "39%"
+   ],
+   "answer": 0,
+   "why": "0.0039 as a proportion dresses to 0.4%. If your percents keep printing 100x too small, a percent went into the % outfit — mixed conventions."
+  },
+  {
+   "code": "rate = 38.9   # stored as a PERCENT\nprint(f\"{rate:.1%}\")",
+   "q": "What prints?",
+   "choices": [
+    "3890.0%",
+    "38.9%",
+    "3.9%",
+    "0.4%"
+   ],
+   "answer": 0,
+   "why": "The classic mix: percent value + % outfit = a 100x blow-up. Store proportions with :.1%, or percents with :.1f% — never cross them."
+  },
+  {
+   "code": "print(round(0.388676, 3) + '%')",
+   "q": "What happens?",
+   "choices": [
+    "TypeError — you cannot add a float and a string",
+    "Prints 0.389%",
+    "Prints 0.389",
+    "Prints '%'"
+   ],
+   "answer": 0,
+   "why": "Never glue numbers to strings with + (the Set 2 Q1 crash). The f-string hole takes any type you hand it."
+  },
+  {
+   "code": "avg = 12.5\nprint(f\"{avg:.2f}\")",
+   "q": "What prints?",
+   "choices": [
+    "12.50",
+    "12.5",
+    "12",
+    "13"
+   ],
+   "answer": 0,
+   "why": ":.2f pads the trailing zero — the look changes, the number does not. Display always wants the look."
+  },
+  {
+   "code": "print(f\"{42:03d}\")",
+   "q": "What prints?",
+   "choices": [
+    "042",
+    "42",
+    "420",
+    " 42"
+   ],
+   "answer": 0,
+   "why": "Outfits pad too: 03d means width 3, zero-filled. Handy for IDs and timestamp pieces."
+  },
+  {
+   "code": "# The prompt: 'Print the fail rate as a percent.'",
+   "q": "Which printed line passes the gate's UNITS question?",
+   "choices": [
+    "38.9%",
+    "0.3887",
+    "38.87",
+    "rate: high"
+   ],
+   "answer": 0,
+   "why": "0.3887 is the correct answer in a lab coat — undressed. Units dressed means the % is ON the number."
+  },
+  {
+   "code": "t = df.groupby('country').size()   # 6 countries",
+   "q": "print(t.shape) prints what?",
+   "choices": [
+    "(6,)",
+    "(6, 2)",
+    "6",
+    "(49720, 6)"
+   ],
+   "answer": 0,
+   "why": "A Series has a 1-D shape — one entry per group. The SHAPE question is about what the object IS, not how big the table was."
+  },
+  {
+   "code": "# Your computation is correct and it printed. Before the next cell, you run the gate.\n# Which gate question catches 'printed 0.3887 instead of 38.9%'?",
+   "q": "Pick the question.",
+   "choices": [
+    "UNITS — is it dressed?",
+    "SHAPE — rows and cols exactly as named?",
+    "NAME — the exact variable assigned?",
+    "VERDICT — the sentence there, quoting printed numbers?"
+   ],
+   "answer": 0,
+   "why": "UNITS is the dress check: % not proportion, MB not bytes, the label matching the magnitude."
+  },
+  {
+   "code": "# Prompt: 'Print the total AND the fail count.'\nprint(total)",
+   "q": "What does the gate say?",
+   "choices": [
+    "Off-spec: fails was computed but never printed — print EVERYTHING the prompt named",
+    "Fine — the total is the headline",
+    "It needs a :.1% outfit",
+    "It needs a sort first"
+   ],
+   "answer": 0,
+   "why": "The NAME question covers printing too: everything named in the prompt reaches the screen, or it does not exist for the grader."
+  },
+  {
+   "code": "print(f\"{47050289} MB\")",
+   "q": "What does the gate's UNITS question say?",
+   "choices": [
+    "The label lies: 47,050,289 is BYTES — divide before you call it MB",
+    "All good",
+    "It should say GB",
+    "It just needs commas"
+   ],
+   "answer": 0,
+   "why": "Cell 03 verbatim. The number's magnitude and its label must tell the same story."
+  },
+  {
+   "code": "share = 0.25\nprint(f\"{share:.0%}\")",
+   "q": "What prints?",
+   "choices": [
+    "25%",
+    "0.25%",
+    "25.0%",
+    "2.5%"
+   ],
+   "answer": 0,
+   "why": ":.0% — zero decimals, and it still multiplies by 100. The number before the % in the spec is decimals, not a multiplier."
+  },
+  {
+   "code": "ts = pd.Timestamp('2026-10-24 17:34:12')",
+   "q": "Which line prints 2026-10-24?",
+   "choices": [
+    "print(ts.strftime('%Y-%m-%d'))",
+    "print(f\"{ts}\")",
+    "print(ts.date.month)",
+    "print(str(ts)[5:10])"
+   ],
+   "answer": 0,
+   "why": "strftime is the timestamp's own outfit rack — same codes as the f-string colon. Slicing str(ts) by hand is how off-by-fives happen."
+  }
+ ]
+},
+{
+ "id": "rapid-traps",
+ "icon": "🪤",
+ "title": "Traps & the Shopping List",
+ "tagline": "the micro-syntax traps, and named agg — name = (column, verb you know)",
+ "cards": [
+  {
+   "code": "mask = df['country'] == 'NL'   # 8,336 Trues among 49,720 rows",
+   "q": "Which expression gives 8336?",
+   "choices": [
+    "mask.sum()",
+    "len(mask)",
+    "mask.len()",
+    "mask.count()"
+   ],
+   "answer": 0,
+   "why": "sum counts the Trues; len counts the mask itself — all 49,720 rows of it (cell 07, fixed in 08; keep it fixed)."
+  },
+  {
+   "code": "mask = df['country'] == 'NL'   # 8,336 Trues among 49,720 rows\nprint(len(mask))",
+   "q": "What prints?",
+   "choices": [
+    "49720",
+    "8336",
+    "1",
+    "True"
+   ],
+   "answer": 0,
+   "why": "len never looks inside — a mask is 49,720 long no matter how many Trues it holds."
+  },
+  {
+   "code": "# GOAL: failed events from NL",
+   "q": "Which line actually works?",
+   "choices": [
+    "df[(df['country'] == 'NL') & (~df['success'])]",
+    "df[df['country'] == 'NL' & ~df['success']]",
+    "df[df['country'] == 'NL' and df['success'] == False]",
+    "df[(df['country'] == 'NL') and (~df['success'])]"
+   ],
+   "answer": 0,
+   "why": "In pandas every comparison wears parentheses, & is the AND, and `and` cannot combine two Series at all (cell 20)."
+  },
+  {
+   "code": "df[df['country'] == 'NL' & df['success']]",
+   "q": "What happens?",
+   "choices": [
+    "It errors — & grabbed 'NL' before == could compare anything",
+    "It filters the NL rows",
+    "It filters the successful NL rows",
+    "It silently returns an empty frame"
+   ],
+   "answer": 0,
+   "why": "& binds tighter than ==, so pandas tries 'NL' & (a column of bools) first and raises. Parentheses are the fix."
+  },
+  {
+   "code": "label = np.where(df['success'], 'ok')",
+   "q": "What is wrong?",
+   "choices": [
+    "np.where takes THREE arguments — condition, if-true, if-false; the if-false is missing",
+    "np.where does not exist",
+    "success must be a list first",
+    "Nothing — it defaults the rest"
+   ],
+   "answer": 0,
+   "why": "Condition, if-true, if-false — all three, every time (cell 20's other wall)."
+  },
+  {
+   "code": "label = np.where(df['success'], 'ok', 'fail')\n# df: 30,000 ok rows, 19,720 fail rows",
+   "q": "What is label?",
+   "choices": [
+    "An array of 'ok'/'fail', one per row — 49,720 long",
+    "A single string",
+    "Two counts: 30000 and 19720",
+    "A new DataFrame"
+   ],
+   "answer": 0,
+   "why": "np.where is a per-row chooser: it hands back a full-length array, ready to become a column."
+  },
+  {
+   "code": "# GOAL: 5 RANDOM rows for a spot check\npick = df.head(5)",
+   "q": "What does the gate say?",
+   "choices": [
+    "head() is the FIRST five — a look, not a sample. Use df.sample(5)",
+    "Fine — head is random enough",
+    "head(5) shuffles, then takes five",
+    "Use df.tail(5) for random rows"
+   ],
+   "answer": 0,
+   "why": "Cells 10 and 15 both reached for head when the prompt wanted the whole frame or a sample. head has exactly one honest job — next card."
+  },
+  {
+   "code": "top = df['country'].value_counts().head(5)",
+   "q": "Why is head() legal HERE?",
+   "choices": [
+    "The sort already happened inside value_counts — head just takes the top of a ranked list",
+    "head sorts descending before slicing",
+    "head(5) means the 5 biggest values anywhere",
+    "It is not legal — always use sample"
+   ],
+   "answer": 0,
+   "why": "head after a sort is top-N. head on an unsorted frame is just the first rows wearing a costume (cell 26)."
+  },
+  {
+   "code": "t = df.groupby('country')['is_fail'].mean()\n# country is t's INDEX now, not a column",
+   "q": "Which line makes country a column again?",
+   "choices": [
+    "t = t.reset_index()",
+    "t = t.set_index('country')",
+    "t = t.rename('country')",
+    "t = t.transpose()"
+   ],
+   "answer": 0,
+   "why": "groupby hands back an index, not a table. reset_index() is the finish — cells 24 and 28 both end there."
+  },
+  {
+   "code": "# Per country: 8,336 rows; user_id is sometimes null; 7,900 distinct users",
+   "q": "You want ROWS per country. Which line?",
+   "choices": [
+    "df.groupby('country').size()",
+    "df.groupby('country')['user_id'].nunique()",
+    "df.groupby('country')['user_id'].count()",
+    "df.groupby('country').nunique()"
+   ],
+   "answer": 0,
+   "why": "size counts rows, full stop. count() would skip the null user_ids; nunique would count distinct users — 7,900, not 8,336."
+  },
+  {
+   "code": "# GOAL: distinct users per country",
+   "q": "Which line?",
+   "choices": [
+    "df.groupby('country')['user_id'].nunique()",
+    "df.groupby('country')['user_id'].size()",
+    "df.groupby('country').size()",
+    "df['user_id'].nunique()"
+   ],
+   "answer": 0,
+   "why": "nunique is the distinct counter — the verb cell 23 reached past when it counted rows and called them users."
+  },
+  {
+   "code": "# GOAL — one table per country: total events, total fails, fail rate",
+   "q": "Which agg does it in ONE pass?",
+   "choices": [
+    "df.groupby('country').agg(total=('event_id', 'count'), fails=('is_fail', 'sum'), rate=('is_fail', 'mean'))",
+    "df.groupby('country').agg(['count', 'sum', 'mean'])",
+    "df.groupby('country').total()",
+    "df.agg(total=('event_id', 'count'))"
+   ],
+   "answer": 0,
+   "why": "agg is a shopping list: each line is name = (column, a verb you already know). This is cell 25 — and SELECT total=COUNT(*), fails=SUM(flag), rate=AVG(flag) in pandas clothes."
+  },
+  {
+   "code": "# In the shopping list, rate is just ('is_fail', 'mean')",
+   "q": "Why does that work?",
+   "choices": [
+    "The mean of a 0/1 flag IS the share of 1s — no division happens inside agg",
+    "agg automatically divides sum by count for you",
+    "Here 'mean' actually means median",
+    "It does not work — a divide line is required"
+   ],
+   "answer": 0,
+   "why": "agg's verbs only ever touch raw columns. Mean-of-flag = rate is the unlock that was hiding inside cell 24 all along."
+  },
+  {
+   "code": "# GOAL per country: smallest and largest event size",
+   "q": "Which line?",
+   "choices": [
+    "df.groupby('country').agg(lo=('bytes', 'min'), hi=('bytes', 'max'))",
+    "df.groupby('country').agg('bytes', ['min', 'max'])",
+    "df.groupby('country').agg(bytes=('min', 'max'))",
+    "Two separate groupbys, then a merge"
+   ],
+   "answer": 0,
+   "why": "One column can appear on the list twice under two names — each line is still just (column, verb)."
+  },
+  {
+   "code": "t = df.groupby('country').agg(total=('event_id', 'count'), fails=('is_fail', 'sum'), rate=('is_fail', 'mean'))\n# The prompt wants a plain table, sorted by rate, rate dressed as a percent",
+   "q": "What is the finish?",
+   "choices": [
+    "reset_index(), sort_values('rate', ascending=False), and print the rate with :.1%",
+    "Nothing — agg output is the final answer",
+    "set_index('country'), then print the proportions raw",
+    "Transpose it, then print"
+   ],
+   "answer": 0,
+   "why": "The shopping list builds the table; the gate still finishes it — index back to a column, order set, units dressed."
+  },
+  {
+   "code": "# df is sorted by ts ascending. GOAL: the latest event per user, WHOLE rows",
+   "q": "Which line?",
+   "choices": [
+    "df.drop_duplicates('user_id', keep='last')",
+    "df.groupby('user_id')['ts'].max()",
+    "df.drop_duplicates('user_id', keep='first')",
+    "df[['user_id', 'ts']].drop_duplicates('user_id', keep='last')"
+   ],
+   "answer": 0,
+   "why": "groupby-max hands you (user, ts) PAIRS — the old P4 trap. Dropping duplicates on the full frame keeps the record whole."
+  },
+  {
+   "code": "df is sorted by ts ASCENDING\ndf.drop_duplicates('user_id', keep='first')",
+   "q": "Which event per user survives?",
+   "choices": [
+    "The EARLIEST — first means first in the current order",
+    "The latest",
+    "A random one",
+    "All of them, marked"
+   ],
+   "answer": 0,
+   "why": "keep speaks about the CURRENT row order, never about time. Sort order is the whole game."
+  },
+  {
+   "code": "df.duplicated('event_id', keep=False)",
+   "q": "What does keep=False change?",
+   "choices": [
+    "EVERY copy of a repeated id is marked True — the original included",
+    "Nothing — keep only matters for drop_duplicates",
+    "Only the last copy is marked",
+    "It drops the rows instead of marking them"
+   ],
+   "answer": 0,
+   "why": "keep=False flags the whole duplicate family. keep='first'/'last' spare one copy each — know which audit you are running."
+  },
+  {
+   "code": "# GOAL: count the events with no reason recorded",
+   "q": "Which line?",
+   "choices": [
+    "df['reason'].isna().sum()",
+    "df['reason'].isna().len()",
+    "len(df['reason']) - df['reason'].isna()",
+    "df['reason'].sum()"
+   ],
+   "answer": 0,
+   "why": "Mask, then sum the Trues. The same one-liner shape as every count in this deck (cell 07)."
+  },
+  {
+   "code": "mask = (df['a'] > 1) and (df['b'] > 2)",
+   "q": "What happens?",
+   "choices": [
+    "ValueError — a Series has no single truth value; use & with parentheses",
+    "It works exactly like &",
+    "It returns the first mask",
+    "It returns plain True"
+   ],
+   "answer": 0,
+   "why": "Python's `and` demands ONE truth; a column has 49,720. pandas refuses — & is the element-wise AND."
+  },
+  {
+   "code": "# You will finish with drop_duplicates('user_id', keep='last') to get each user's LATEST event.\n# df is currently sorted by user_id.",
+   "q": "What is missing?",
+   "choices": [
+    "Sort by ts FIRST — keep='last' means last in the CURRENT order, not latest in time",
+    "Nothing — keep finds the max ts on its own",
+    "keep='last' sorts the frame internally",
+    "drop_duplicates needs the column sorted"
+   ],
+   "answer": 0,
+   "why": "The sort is not a nicety — it is what makes 'last' mean 'latest'. Skip it and you keep alphabetically-last users' random events."
+  },
+  {
+   "code": "# reason is null for 1,995 rows\ndf.groupby('country').count()",
+   "q": "What does the reason column of the result show?",
+   "choices": [
+    "Counts EXCLUDING the nulls — rows whose reason is missing are not counted",
+    "All rows per country",
+    "The null counts per country",
+    "It errors wherever it meets a null"
+   ],
+   "answer": 0,
+   "why": "count() is per-column and non-null only. When the question is rows, the verb is size()."
+  },
+  {
+   "code": "# Your cell printed exactly this and nothing else:\n# NL fail rate 38.9% - DE fail rate 13.4%",
+   "q": "Which sentence can you NOT say?",
+   "choices": [
+    "NL has the highest fail rate of ALL countries",
+    "NL's rate is higher than DE's",
+    "NL fails at 38.9%, DE at 13.4%",
+    "NL's rate is roughly triple DE's"
+   ],
+   "answer": 0,
+   "why": "Only two countries were printed. 'Of ALL countries' claims numbers that never reached the screen — the verdict gate kills it."
+  },
+  {
+   "code": "# Every number in your cell is correct. It prints 0.3887 where a percent was asked,\n# and the verdict sentence is missing.",
+   "q": "What failed?",
+   "choices": [
+    "The finish — done is a SHAPE, not a feeling; the gate runs before the next cell",
+    "The computation",
+    "pandas",
+    "Nothing — the numbers are what count"
+   ],
+   "answer": 0,
+   "why": "Every miss on the grocery list happened AFTER a correct computation existed. The core answer is halftime; the gate is the second half."
+  }
+ ]
+}
 ];
 if (typeof module !== 'undefined' && module.exports) module.exports = {RAPID_DECKS};
 
@@ -4300,8 +5189,33 @@ function rapidSectionHtml(){
   h += '</div>';
   return h;
 }
+var GROCERY_DECK_IDS = ['rapid-phrasebook', 'rapid-finish', 'rapid-traps'];
+function grocerySectionHtml(){
+  var h = '<div class="unithead">\uD83E\uDDFA Tonight \u2014 The Grocery List</div>' +
+    '<p class="note" style="margin:-4px 2px 10px">Built from your graded misses in the Pandas 50 (cells 1\u201324): every card in these decks is a miss you actually made, drilled back at you. Interview is tomorrow, 8:30 AM \u2014 this is the hammering section.</p>';
+  h += '<div class="card"><h3 style="margin-top:0">\uD83D\uDEAA The Finish Gate \u2014 out loud, before every next cell</h3>' +
+    '<p style="margin:4px 0"><b>1. UNITS</b> \u2014 is it dressed? (% not proportion, MB not bytes)<br>' +
+    '<b>2. SHAPE</b> \u2014 rows/cols/type exactly what the prompt named?<br>' +
+    '<b>3. NAME</b> \u2014 the exact variable assigned, and everything named actually printed?<br>' +
+    '<b>4. VERDICT</b> \u2014 the sentence there, quoting only numbers already printed?</p>' +
+    '<p style="margin:6px 0"><i>The core answer is halftime; the gate is the second half. Done is a shape, not a feeling.</i></p>' +
+    codeBlock('rate = 0.388676\nprint(f"{rate:.1%}")        # 38.9% \u2014 the outfit multiplies\nprint(f"{pct:.1f}%")         # pct already a percent: 38.9%\nprint(f"{n:,}")              # 49,720\nprint(f"{b/1_000_000:.1f} MB")  # 47.1 MB \u2014 the division is yours\n\n# the line cells 24-25 actually print:\nprint(f"{name} \u2014 {total:,} \u2014 {fails:,} \u2014 {fails/total:.1%}")') +
+    '<p style="margin:6px 0"><b>Named agg is a shopping list:</b> <code>agg(total=(\'event_id\',\'count\'), fails=(\'is_fail\',\'sum\'), rate=(\'is_fail\',\'mean\'))</code> \u2014 each line is <i>name = (column, a verb you already know)</i>, and rate inside agg is just mean again.</p>' +
+    '<p class="note" style="margin-bottom:0">Cold retest scoreboard lives in the notebook (cells 03 \u00B7 05 \u00B7 06 \u00B7 07 \u00B7 10 \u00B7 13 \u00B7 15 \u00B7 20 \u00B7 24 \u2014 clears only on a clean cold pass). The decks below are the in-app reps: 12 cards a run, 10 seconds each, misses go to your review queue.</p></div>';
+  h += '<div class="cards">';
+  GROCERY_DECK_IDS.forEach(function(id){
+    var D = rapidDeck(id); if (!D) return;
+    var best = state.rapid.best[D.id] || 0, plays = state.rapid.plays[D.id] || 0;
+    h += '<button class="pathcard" onclick="H.rapidStart(\'' + D.id + '\')">' +
+      '<div class="icon">' + D.icon + '</div><div><div class="t">' + escHtml(D.title) + '</div>' +
+      '<div class="s">' + escHtml(D.tagline) + '</div></div><div class="dots">' + (plays ? '\uD83C\uDFC6 best ' + best + ' / ' + RAPID_RUN + ' \u00B7 ' + plays + ' run' + (plays === 1 ? '' : 's') : '\u25B6 Start') + '</div></button>';
+  });
+  h += '</div>';
+  return h;
+}
 function viewHome(){
   var h = headerHtml();
+  h += grocerySectionHtml();
   if (!storageOK) h += '<div class="warn">⚠️ This browser is blocking local saving in this context, so progress may not survive closing the tab. Use <b>Export progress</b> below after each session to keep a backup file you can re-import.</div>';
   h += sectionHtml('drills');
   h += sectionHtml('sql');
