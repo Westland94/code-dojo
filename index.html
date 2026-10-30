@@ -1786,6 +1786,18 @@ const RAPID_DECKS = [
  ],
  "answer": 0,
  "why": "value_counts counts the VALUES of whatever you point it at — here, event_ids inside each country. Point it at a unique ID and you get a phone book, not a summary. Events per country is df['country'].value_counts(). (Andrew hit this live, 2026-10-29.)"
+},
+{
+ "code": "df.groupby('country').value_counts()\n# df has a column of dicts (nested JSON from the events feed)",
+ "q": "What happens?",
+ "choices": [
+  "TypeError: unhashable type: 'dict' — with no column selected, it tries to count row-combinations of ALL columns, and dicts can't be hashed",
+  "Events per country — the dict column is simply ignored",
+  "It counts the dicts fine — dicts are hashable in pandas",
+  "A warning, then counts per country anyway"
+ ],
+ "answer": 0,
+ "why": "DataFrameGroupBy.value_counts() counts distinct combinations of every remaining column per group. Counting requires hashing, and a dict is unhashable. Select a column first — or for events per country, skip the groupby: df['country'].value_counts(). (Andrew hit this live, 2026-10-29.)"
 }
  ]
 }
@@ -5416,6 +5428,13 @@ const GROCERY_EXPLAIN = {
     "value_counts() counts how often each distinct VALUE of that column occurs — within its group. It aggregated and sorted exactly as promised.",
     "But event_id is unique: every value occurs exactly once, so you get all 49,720 (country, event_id) pairs with count 1 — a census, not a summary.",
     "Rule: value_counts summarizes the column you POINT it at. Point it at the category (df['country'].value_counts()) for events per country; point it at a unique key and you get a phone book."
+   ],
+   [
+    "Compare with the line that worked: groupby('country')['event_id'] selected ONE column before counting. This line selects nothing.",
+    "With nothing selected, the groupby carries the WHOLE frame — and DataFrameGroupBy.value_counts() counts distinct combinations of all the other columns, per country.",
+    "Counting distinct things requires hashing them (that's the factorize/_unique work in the traceback).",
+    "One of your columns holds dicts — nested JSON — and a dict is unhashable: TypeError, deep inside pandas, three frames from your line.",
+    "Rule: value_counts can only count hashable values. Select the column you mean first (groupby['col'].value_counts()), flatten dict columns (json_normalize), or — for plain events-per-country — df['country'].value_counts() / groupby.size()."
    ]
   ]
  }
@@ -5428,6 +5447,802 @@ if (typeof RAPID_DECKS !== 'undefined'){
   });
 }
 if (typeof module !== 'undefined' && module.exports) module.exports = {GROCERY_EXPLAIN};
+
+</script>
+<script>
+'use strict';
+/* Pandas Gym — 50 write-and-execute exercises. Expected outputs were generated
+   by running the reference solutions under real pandas against GYM_SETUP
+   (tests/verify_gym.py re-checks them). Solutions ship only for the governed
+   study reveal after 3 fails. */
+const GYM_SETUP = "import pandas as pd, numpy as np\nrng = np.random.RandomState(42)\ncountries = ['NL', 'DE', 'FR', 'CA', 'US', 'GB']\nusers = ['user-%03d' % i for i in range(1, 61)]\nn = 600\ndf = pd.DataFrame({\n    'event_id': ['evt-%05d' % i for i in range(n)],\n    'user_id': rng.choice(users, n),\n    'country': rng.choice(countries, n, p=[0.22, 0.20, 0.17, 0.15, 0.14, 0.12]),\n    'success': rng.rand(n) > 0.36,\n    'bytes': rng.randint(200, 9000, n),\n    'ts': pd.date_range('2026-10-20 08:00', periods=n, freq='7min'),\n})\n_reasons = []\nfor _s in df['success']:\n    if _s:\n        _reasons.append(None)\n    elif rng.rand() < 0.15:\n        _reasons.append(None)\n    else:\n        _reasons.append(rng.choice(['bad_password', 'mfa_timeout', 'locked', 'token_expired']))\ndf['reason'] = _reasons\ndf['is_fail'] = (~df['success']).astype(int)\n_domains = ['example.com', 'mail.org', 'corp.net']\ndf['email'] = [u + '@' + _domains[int(u.split('-')[1]) % 3] for u in df['user_id']]\nraw = pd.concat([df, df.iloc[[10, 200, 350, 599]]], ignore_index=True)\nusers = pd.DataFrame({\n    'user_id': users,\n    'tier': rng.choice(['free', 'pro', 'team'], 60, p=[0.5, 0.3, 0.2]),\n    'home_country': rng.choice(countries, 60),\n})\nrecords = [\n    {'event_id': 'evt-x1', 'user': {'id': 'user-001', 'tier': 'pro'}, 'ok': True},\n    {'event_id': 'evt-x2', 'user': {'id': 'user-002', 'tier': 'free'}, 'ok': False},\n    {'event_id': 'evt-x3', 'user': {'id': 'user-003', 'tier': 'pro'}, 'ok': True},\n    {'event_id': 'evt-x4', 'user': {'id': 'user-004', 'tier': 'team'}, 'ok': True},\n    {'event_id': 'evt-x5', 'user': {'id': 'user-005', 'tier': 'free'}, 'ok': False},\n    {'event_id': 'evt-x6', 'user': {'id': 'user-006', 'tier': 'pro'}, 'ok': False},\n    {'event_id': 'evt-x7', 'user': {'id': 'user-007', 'tier': 'team'}, 'ok': True},\n    {'event_id': 'evt-x8', 'user': {'id': 'user-008', 'tier': 'free'}, 'ok': True},\n]";
+const GYM_EXERCISES = [
+ {
+  "id": "g01",
+  "block": "First moves",
+  "title": "Shape First",
+  "tech": "shape check",
+  "prompt": "The deduped frame `df` is loaded: 600 auth events. A shape check comes before everything — print the frame's shape, exactly as pandas reports it.",
+  "starter": "# print the shape of df",
+  "expect": "(600, 9)",
+  "hint": "The gate's SHAPE question, as code: a frame's shape is one attribute away.",
+  "walk": [
+   "The prompt wants rows AND columns in one object.",
+   "That object is df.shape — a tuple, printed as-is.",
+   "len(df) would give rows only — cell 06's exact miss."
+  ],
+  "sol": "print(df.shape)"
+ },
+ {
+  "id": "g02",
+  "block": "First moves",
+  "title": "The Dup Audit",
+  "tech": "duplicated().sum()",
+  "prompt": "The raw frame `raw` (604 rows) still contains exact duplicate rows. Print how many rows are exact duplicates — one number.",
+  "starter": "# count the exact duplicate rows in raw",
+  "expect": "4",
+  "hint": "A mask, then a sum. The audit is one line.",
+  "walk": [
+   "duplicated() marks every row that repeats an earlier row, True/False.",
+   "sum() over that mask counts the Trues.",
+   "No set, no loop — mask + sum is the counting shape."
+  ],
+  "sol": "print(raw.duplicated().sum())"
+ },
+ {
+  "id": "g03",
+  "block": "First moves",
+  "title": "Dedupe and Measure",
+  "tech": "drop_duplicates",
+  "prompt": "Still in `raw`: dedupe it into a new frame and print how many rows the dedupe removed — one number.",
+  "starter": "# how many rows does deduping raw remove?",
+  "expect": "4",
+  "hint": "drop_duplicates() with no arguments compares whole rows.",
+  "walk": [
+   "Exact duplicates means identical in every column — drop_duplicates() with no subset does exactly that.",
+   "Removed = before minus after; len() is honest for measuring a frame's rows."
+  ],
+  "sol": "clean = raw.drop_duplicates()\nprint(len(raw) - len(clean))"
+ },
+ {
+  "id": "g04",
+  "block": "First moves",
+  "title": "A Proper First Look",
+  "tech": "head + tolist",
+  "prompt": "Print the first 3 event_ids of `df` as a plain Python list.",
+  "starter": "# the first 3 event_ids, as a list",
+  "expect": "['evt-00000', 'evt-00001', 'evt-00002']",
+  "hint": "head for the look, tolist to make it a list.",
+  "walk": [
+   "Select the column, head(3) takes the top three (the frame is in event order).",
+   "A Series prints with its index and dtype — .tolist() strips it to the plain list asked for."
+  ],
+  "sol": "print(df['event_id'].head(3).tolist())"
+ },
+ {
+  "id": "g05",
+  "block": "Counting",
+  "title": "Events per Country",
+  "tech": "value_counts",
+  "prompt": "Print the events per country for `df`, biggest first — the full Series.",
+  "starter": "# events per country",
+  "expect": "country\nNL    147\nDE    116\nFR    103\nUS     82\nCA     77\nGB     75\nName: count, dtype: int64",
+  "hint": "One verb does the grouping, the counting, and the sorting.",
+  "walk": [
+   "This is the SQL GROUP BY + COUNT + ORDER BY DESC as a single pandas verb.",
+   "Point value_counts at the category column itself — df['country'] — nothing else."
+  ],
+  "sol": "print(df['country'].value_counts())"
+ },
+ {
+  "id": "g06",
+  "block": "Counting",
+  "title": "Shares, Not Counts",
+  "tech": "value_counts(normalize=True)",
+  "prompt": "Print each country's SHARE of all events in `df` — proportions, rounded to 3 decimals. The full Series.",
+  "starter": "# country shares, rounded to 3",
+  "expect": "country\nNL    0.245\nDE    0.193\nFR    0.172\nUS    0.137\nCA    0.128\nGB    0.125\nName: proportion, dtype: float64",
+  "hint": "There's a switch on value_counts that turns counts into shares.",
+  "walk": [
+   "normalize=True divides each count by the total inside the verb.",
+   "round(3) dresses the proportions; no manual division, no apply."
+  ],
+  "sol": "print(df['country'].value_counts(normalize=True).round(3))"
+ },
+ {
+  "id": "g07",
+  "block": "Counting",
+  "title": "Name the Biggest",
+  "tech": "idxmax",
+  "prompt": "Print one line: the country with the most events, then its count — exactly like `NL — 134` (an em dash with a space each side).",
+  "starter": "# COUNTRY — COUNT for the biggest country",
+  "expect": "NL — 147",
+  "hint": "idxmax gives the label; max gives the value. You need both.",
+  "walk": [
+   "value_counts gives counts labeled by country.",
+   "idxmax() returns the LABEL of the biggest (the name); .max() returns the biggest NUMBER.",
+   "One f-string assembles the line — label, dash, value."
+  ],
+  "sol": "c = df['country'].value_counts()\nprint(f\"{c.idxmax()} — {c.max()}\")"
+ },
+ {
+  "id": "g08",
+  "block": "Counting",
+  "title": "Count the Missing Too",
+  "tech": "value_counts(dropna=False)",
+  "prompt": "Print the top 3 values of the `reason` column in `df` — INCLUDING the missing ones as their own bucket.",
+  "starter": "# top 3 reasons, missing included",
+  "expect": "reason\nNone             426\nbad_password      51\ntoken_expired     50\nName: count, dtype: int64",
+  "hint": "By default value_counts throws the missing values away. There's a flag for that.",
+  "walk": [
+   "dropna=False keeps NaN as a countable bucket.",
+   "head(3) after the built-in sort takes the top of the ranking."
+  ],
+  "sol": "print(df['reason'].value_counts(dropna=False).head(3))"
+ },
+ {
+  "id": "g09",
+  "block": "Masks",
+  "title": "Count the Fails",
+  "tech": "mask + sum",
+  "prompt": "Print how many events in `df` failed. Do NOT use the is_fail column — build it from `success`.",
+  "starter": "# count of failed events, from success",
+  "expect": "213",
+  "hint": "Flip the column, then count the Trues.",
+  "walk": [
+   "~df['success'] is a mask that is True exactly where an event failed.",
+   "sum() over a mask counts its Trues.",
+   "len() would count every row — the mask's length, not its contents."
+  ],
+  "sol": "print((~df['success']).sum())"
+ },
+ {
+  "id": "g10",
+  "block": "Masks",
+  "title": "Two Conditions",
+  "tech": "parenthesized &",
+  "prompt": "Print how many events in `df` are failures from NL — both conditions at once.",
+  "starter": "# failed AND from NL",
+  "expect": "45",
+  "hint": "Two masks, one & — and every comparison wears parentheses.",
+  "walk": [
+   "Build mask one: country is NL. Build mask two: not success.",
+   "& combines them element-wise; sum counts the rows where both are True.",
+   "Without parentheses, & grabs 'NL' before == can compare — the cell 20 error."
+  ],
+  "sol": "print(((df['country'] == 'NL') & (~df['success'])).sum())"
+ },
+ {
+  "id": "g11",
+  "block": "Masks",
+  "title": "The Null Audit",
+  "tech": "isna().sum()",
+  "prompt": "Print how many events in `df` have no reason recorded — one number.",
+  "starter": "# events with a missing reason",
+  "expect": "426",
+  "hint": "Missing has its own mask verb.",
+  "walk": [
+   "isna() marks the missing values True.",
+   "Mask + sum counts them — the same one-line shape as every count in this gym."
+  ],
+  "sol": "print(df['reason'].isna().sum())"
+ },
+ {
+  "id": "g12",
+  "block": "Masks",
+  "title": "Dress the Rate",
+  "tech": "mean of a flag, :.1%",
+  "prompt": "Print the overall fail rate of `df` as a dressed percent with one decimal — exactly like `36.4%`. Nothing else on the line.",
+  "starter": "# the overall fail rate, dressed",
+  "expect": "35.5%",
+  "hint": "The mean of a 0/1 column, and an outfit that multiplies for you.",
+  "walk": [
+   "mean() of is_fail is the share of failures — a proportion.",
+   "The :.1% outfit multiplies by 100, rounds to one decimal, and adds the sign.",
+   "No hand multiplication anywhere in the line."
+  ],
+  "sol": "print(f\"{df['is_fail'].mean():.1%}\")"
+ },
+ {
+  "id": "g13",
+  "block": "Strings",
+  "title": "Domain Census",
+  "tech": ".str.split + value_counts",
+  "prompt": "Print the value counts of the email DOMAINS in `df` (the part after the @). Full Series.",
+  "starter": "# events per email domain",
+  "expect": "email\nexample.com    217\ncorp.net       199\nmail.org       184\nName: count, dtype: int64",
+  "hint": "String surgery on a whole column goes through one accessor — twice here.",
+  "walk": [
+   ".str.split('@') splits every email into [user, domain] lists, column-wide.",
+   "A second .str[1] picks the domain out of each list.",
+   "value_counts finishes it — counting is a different verb from splitting."
+  ],
+  "sol": "print(df['email'].str.split('@').str[1].value_counts())"
+ },
+ {
+  "id": "g14",
+  "block": "Strings",
+  "title": "Reasons Mentioning Password",
+  "tech": ".str.contains",
+  "prompt": "Print how many events in `df` have a reason that mentions 'password'. Missing reasons are not matches.",
+  "starter": "# reasons mentioning password",
+  "expect": "51",
+  "hint": "A text search inside a column — with a guard for the missing values.",
+  "walk": [
+   ".str.contains('password') tests each string and returns a mask.",
+   "na=False turns missing reasons into False; without it the mask fills with NaN and the count breaks.",
+   "Mask + sum, as always."
+  ],
+  "sol": "print(df['reason'].str.contains('password', na=False).sum())"
+ },
+ {
+  "id": "g15",
+  "block": "Strings",
+  "title": "Pull the User Number",
+  "tech": ".str.extract",
+  "prompt": "User ids look like 'user-042'. Print the largest user NUMBER in `df` as a plain integer.",
+  "starter": "# the biggest user number",
+  "expect": "60",
+  "hint": "Extract the digits with a pattern, then they're numbers.",
+  "walk": [
+   ".str.extract with a capture group pulls the digit run out of each id — as text.",
+   "astype(int) makes them numbers; max() takes the largest.",
+   "Comparing the strings would sort 'user-099' above 'user-100' — text order is not number order."
+  ],
+  "sol": "print(df['user_id'].str.extract(r'user-(\\d+)')[0].astype(int).max())"
+ },
+ {
+  "id": "g16",
+  "block": "Groupby",
+  "title": "Rows per Country, Groupby Style",
+  "tech": "groupby.size",
+  "prompt": "Print rows per country in `df` using a groupby — NOT value_counts this time. The verb that counts rows in each group.",
+  "starter": "# rows per country via groupby",
+  "expect": "country\nCA     77\nDE    116\nFR    103\nGB     75\nNL    147\nUS     82\ndtype: int64",
+  "hint": "One groupby verb counts rows and nothing else.",
+  "walk": [
+   "groupby('country') forms the groups.",
+   "size() counts ROWS per group — it never looks at any column's values.",
+   "count() would give you per-column non-null counts instead — a different table."
+  ],
+  "sol": "print(df.groupby('country').size())"
+ },
+ {
+  "id": "g17",
+  "block": "Groupby",
+  "title": "Fail Rate per Country",
+  "tech": "groupby mean of flag",
+  "prompt": "Print the fail rate per country in `df`, rounded to 3 decimals. Full Series.",
+  "starter": "# fail rate by country, rounded to 3",
+  "expect": "country\nCA    0.416\nDE    0.379\nFR    0.340\nGB    0.427\nNL    0.306\nUS    0.305\nName: is_fail, dtype: float64",
+  "hint": "In SQL this is AVG of a CASE WHEN. In pandas it's shorter.",
+  "walk": [
+   "groupby splits by country; ['is_fail'] picks the flag column.",
+   "mean() of a 0/1 flag inside each group is that group's rate.",
+   "round(3) dresses the proportions."
+  ],
+  "sol": "print(df.groupby('country')['is_fail'].mean().round(3))"
+ },
+ {
+  "id": "g18",
+  "block": "Groupby",
+  "title": "Distinct Users per Country",
+  "tech": "groupby nunique",
+  "prompt": "Print how many DISTINCT users appear in each country in `df`. Full Series.",
+  "starter": "# distinct users per country",
+  "expect": "country\nCA    48\nDE    53\nFR    48\nGB    40\nNL    52\nUS    42\nName: user_id, dtype: int64",
+  "hint": "The word 'distinct' names the verb.",
+  "walk": [
+   "nunique counts distinct values — the same user 50 times counts once.",
+   "size() here would count events, not users — cell 23's swap."
+  ],
+  "sol": "print(df.groupby('country')['user_id'].nunique())"
+ },
+ {
+  "id": "g19",
+  "block": "Groupby",
+  "title": "Payload per Country",
+  "tech": "groupby sum",
+  "prompt": "Print the total bytes per country in `df`. Full Series.",
+  "starter": "# total bytes by country",
+  "expect": "country\nCA    362319\nDE    546969\nFR    473434\nGB    402030\nNL    681622\nUS    373529\nName: bytes, dtype: int64",
+  "hint": "Totals are just another verb on the same rails.",
+  "walk": [
+   "groupby forms the countries, ['bytes'] picks the payload column, sum() totals it.",
+   "Same split-apply-combine shape as counts and means — only the verb changes."
+  ],
+  "sol": "print(df.groupby('country')['bytes'].sum())"
+ },
+ {
+  "id": "g20",
+  "block": "Groupby",
+  "title": "Count Is Not Size",
+  "tech": "groupby count vs nulls",
+  "prompt": "Print, per country, how many events in `df` HAVE a reason recorded (reason present, not missing). Use the groupby verb that skips missing values.",
+  "starter": "# per country: events with a reason present",
+  "expect": "country\nCA    24\nDE    36\nFR    33\nGB    25\nNL    38\nUS    18\nName: reason, dtype: int64",
+  "hint": "One groupby verb counts present values per column — nulls excluded.",
+  "walk": [
+   "count() on a column counts its NON-NULL values inside each group.",
+   "That's why count on 'reason' is smaller than size() — the missing reasons were never counted.",
+   "Rows = size; present values = count; distinct = nunique. Three nouns, three verbs."
+  ],
+  "sol": "print(df.groupby('country')['reason'].count())"
+ },
+ {
+  "id": "g21",
+  "block": "Named agg",
+  "title": "The Shopping List, Two Lines",
+  "tech": "agg basics",
+  "prompt": "Build one table per country in `df` with exactly two columns: `total` (events) and `fails` (failed events). Print the whole table.",
+  "starter": "# per country: total and fails, one agg",
+  "expect": "         total  fails\ncountry              \nCA          77     32\nDE         116     44\nFR         103     35\nGB          75     32\nNL         147     45\nUS          82     25",
+  "hint": "agg is a shopping list: name = (column, verb).",
+  "walk": [
+   "Line one: total = ('event_id', 'count') — count the rows per country.",
+   "Line two: fails = ('is_fail', 'sum') — summing the 0/1 flag counts the failures.",
+   "Two lines you already know, in one set of parentheses."
+  ],
+  "sol": "print(df.groupby('country').agg(total=('event_id', 'count'), fails=('is_fail', 'sum')))"
+ },
+ {
+  "id": "g22",
+  "block": "Named agg",
+  "title": "Dressed Rate Lines",
+  "tech": "agg + reset + formatted print",
+  "prompt": "Per country in `df`, print one line per country, sorted by fail rate descending, exactly like `NL — 38.9%` (country, em dash, dressed rate). Use a named agg to build the table first, then print from it.",
+  "starter": "# per country, by rate desc: CC — pp.p%",
+  "expect": "GB — 42.7%\nCA — 41.6%\nDE — 37.9%\nFR — 34.0%\nNL — 30.6%\nUS — 30.5%",
+  "hint": "Build the table with the shopping list; the printing is a separate, dressed step.",
+  "walk": [
+   "agg gives total, fails, and rate in one pass — rate is ('is_fail', 'mean') again.",
+   "reset_index turns country back into a column so you can sort and print from it.",
+   "sort_values('rate', ascending=False), then each line dresses its rate with :.1%."
+  ],
+  "sol": "t = df.groupby('country').agg(total=('event_id', 'count'), fails=('is_fail', 'sum'), rate=('is_fail', 'mean')).reset_index().sort_values('rate', ascending=False)\nfor _, r in t.iterrows():\n    print(f\"{r['country']} — {r['rate']:.1%}\")"
+ },
+ {
+  "id": "g23",
+  "block": "Named agg",
+  "title": "Smallest and Largest Payload",
+  "tech": "agg two verbs, one column",
+  "prompt": "Print the smallest and largest single-event byte counts for GB in `df`, as one Series with two entries named `lo` and `hi`.",
+  "starter": "# GB: lo and hi bytes via agg",
+  "expect": "lo     404\nhi    8937\nName: GB, dtype: int64",
+  "hint": "One column may appear on the shopping list twice.",
+  "walk": [
+   "lo = ('bytes', 'min') and hi = ('bytes', 'max') — same column, two verbs, two names.",
+   ".loc['GB'] picks the GB row of the finished table."
+  ],
+  "sol": "print(df.groupby('country').agg(lo=('bytes', 'min'), hi=('bytes', 'max')).loc['GB'])"
+ },
+ {
+  "id": "g24",
+  "block": "Named agg",
+  "title": "Agg, Sort, Top Two",
+  "tech": "agg + sort_values + head",
+  "prompt": "Print the two countries with the most FAILURES in `df` — a table with columns `total` and `fails`, built with a named agg, biggest fails first.",
+  "starter": "# top 2 countries by fails",
+  "expect": "         total  fails\ncountry              \nNL         147     45\nDE         116     44",
+  "hint": "The shopping list builds; then ranking is sort + head.",
+  "walk": [
+   "agg builds total and fails per country.",
+   "sort_values('fails', ascending=False) ranks by the fails column.",
+   "head(2) takes the top of a RANKED table — head's one honest job."
+  ],
+  "sol": "print(df.groupby('country').agg(total=('event_id', 'count'), fails=('is_fail', 'sum')).sort_values('fails', ascending=False).head(2))"
+ },
+ {
+  "id": "g25",
+  "block": "Ranking",
+  "title": "Top 3 by Failures",
+  "tech": "groupby sum + sort + head",
+  "prompt": "Print the top 3 countries by number of failures in `df`, as a Series of fail counts, biggest first.",
+  "starter": "# top 3 countries by fail count",
+  "expect": "country\nNL    45\nDE    44\nFR    35\nName: is_fail, dtype: int64",
+  "hint": "Sum per group, then rank, then cut.",
+  "walk": [
+   "groupby sum gives fails per country, unsorted.",
+   "sort_values(ascending=False) ranks them; head(3) takes the podium."
+  ],
+  "sol": "print(df.groupby('country')['is_fail'].sum().sort_values(ascending=False).head(3))"
+ },
+ {
+  "id": "g26",
+  "block": "Ranking",
+  "title": "The Biggest Single Event",
+  "tech": "idxmax + loc",
+  "prompt": "Print the event_id of the single largest event (most bytes) in `df`.",
+  "starter": "# event_id of the biggest event",
+  "expect": "evt-00343",
+  "hint": "idxmax finds the row's label; loc fetches from that row.",
+  "walk": [
+   "idxmax() on the bytes column returns the INDEX of the biggest row.",
+   ".loc[that index, 'event_id'] reads the id off that exact row.",
+   "Sorting the whole frame to find one row is the long way round."
+  ],
+  "sol": "print(df.loc[df['bytes'].idxmax(), 'event_id'])"
+ },
+ {
+  "id": "g27",
+  "block": "Ranking",
+  "title": "A Reproducible Sample",
+  "tech": "sample(random_state)",
+  "prompt": "Print the event_ids of a random sample of 3 events from `df`, as a list. Use random_state=7 so the draw is reproducible.",
+  "starter": "# 3 sampled event_ids, seed 7",
+  "expect": "['evt-00261', 'evt-00132', 'evt-00575']",
+  "hint": "A sample with a seed is a draw anyone can replay.",
+  "walk": [
+   "sample(3, random_state=7) draws 3 rows at random, reproducibly.",
+   "Select event_id, then tolist() for the plain list.",
+   "head(3) would be the first three — a look, not a sample."
+  ],
+  "sol": "print(df.sample(3, random_state=7)['event_id'].tolist())"
+ },
+ {
+  "id": "g28",
+  "block": "Missing data",
+  "title": "Fill, Then Count",
+  "tech": "fillna + value_counts",
+  "prompt": "In `df`, treat missing reasons as the string 'unknown'. Print the top 2 reason values after filling — full counts.",
+  "starter": "# top 2 reasons after filling missing with 'unknown'",
+  "expect": "reason\nunknown         426\nbad_password     51\nName: count, dtype: int64",
+  "hint": "Fill first, and the missing bucket becomes a countable value.",
+  "walk": [
+   "fillna('unknown') replaces every NaN in the column with that string.",
+   "value_counts then counts 'unknown' like any other reason — likely the biggest bucket.",
+   "head(2) takes the top of the ranking."
+  ],
+  "sol": "print(df['reason'].fillna('unknown').value_counts().head(2))"
+ },
+ {
+  "id": "g29",
+  "block": "Missing data",
+  "title": "Successes Have No Reason",
+  "tech": "loc + isna + all",
+  "prompt": "Print True or False: is it the case that EVERY successful event in `df` has a missing reason?",
+  "starter": "# do all successes have a missing reason?",
+  "expect": "True",
+  "hint": "Filter to the successes, test the reasons, ask if all pass.",
+  "walk": [
+   ".loc[df['success'], 'reason'] selects the reason column of successful rows only.",
+   "isna() marks each one missing or not.",
+   ".all() answers whether every single mark is True — one False anywhere sinks it."
+  ],
+  "sol": "print(df.loc[df['success'], 'reason'].isna().all())"
+ },
+ {
+  "id": "g30",
+  "block": "Missing data",
+  "title": "How Many Rows Survive",
+  "tech": "dropna(subset)",
+  "prompt": "Print how many rows of `df` would remain if you dropped every row whose reason is missing.",
+  "starter": "# rows left after dropping missing reasons",
+  "expect": "174",
+  "hint": "dropna with a subset only judges the named columns.",
+  "walk": [
+   "dropna(subset=['reason']) drops rows where REASON is missing — other columns' nulls don't matter.",
+   "len() measures what survived. Nothing is assigned; the question is a measurement."
+  ],
+  "sol": "print(len(df.dropna(subset=['reason'])))"
+ },
+ {
+  "id": "g31",
+  "block": "Flags & labels",
+  "title": "Label Every Row",
+  "tech": "np.where",
+  "prompt": "Build the array that labels every event in `df` 'ok' or 'fail' from `success`, and print its value counts as a Series.",
+  "starter": "# counts of ok / fail labels",
+  "expect": "ok      387\nfail    213\nName: count, dtype: int64",
+  "hint": "np.where takes three things — condition, if-true, if-false — and labels every row.",
+  "walk": [
+   "np.where walks the success column and stamps 'ok' or 'fail' per row — a full-length array.",
+   "Wrapping it in pd.Series lets value_counts count the stamps.",
+   "Two arguments would be cell 20's error — the if-false is not optional."
+  ],
+  "sol": "print(pd.Series(np.where(df['success'], 'ok', 'fail')).value_counts())"
+ },
+ {
+  "id": "g32",
+  "block": "Flags & labels",
+  "title": "Big Failures Only",
+  "tech": "combined mask",
+  "prompt": "Print how many events in `df` are failures AND carried more than 6000 bytes.",
+  "starter": "# failures with bytes > 6000",
+  "expect": "87",
+  "hint": "Two masks again — a flag test and a size test.",
+  "walk": [
+   "Mask one: is_fail equals 1. Mask two: bytes over 6000.",
+   "Parenthesize both, join with &, sum the Trues."
+  ],
+  "sol": "print(((df['is_fail'] == 1) & (df['bytes'] > 6000)).sum())"
+ },
+ {
+  "id": "g33",
+  "block": "Merge",
+  "title": "Attach the Tier",
+  "tech": "merge",
+  "prompt": "The `users` frame maps each user_id to a tier. Merge it onto `df` and print the value counts of the tier column — events per tier, full Series.",
+  "starter": "# events per tier, via merge",
+  "expect": "tier\nfree    336\npro     157\nteam    107\nName: count, dtype: int64",
+  "hint": "merge is the JOIN verb — on the shared key.",
+  "walk": [
+   "merge(users, on='user_id') pairs every event with its user's row; tier arrives as a new column.",
+   "value_counts on the merged frame counts events per tier.",
+   "concat would stack the frames; join() would align on index — neither joins on the key."
+  ],
+  "sol": "m = df.merge(users, on='user_id')\nprint(m['tier'].value_counts())"
+ },
+ {
+  "id": "g34",
+  "block": "Merge",
+  "title": "Fail Rate by Tier",
+  "tech": "merge + groupby mean",
+  "prompt": "Using the merged frame (events + users), print the fail rate per tier, rounded to 3 decimals. Full Series.",
+  "starter": "# fail rate by tier, rounded to 3",
+  "expect": "tier\nfree    0.327\npro     0.389\nteam    0.393\nName: is_fail, dtype: float64",
+  "hint": "Join first, then the rate is the same mean-of-flag as always.",
+  "walk": [
+   "The merge attaches tier to every event.",
+   "groupby('tier') + mean of is_fail — the rate recipe doesn't care what the grouping column is."
+  ],
+  "sol": "m = df.merge(users, on='user_id')\nprint(m.groupby('tier')['is_fail'].mean().round(3))"
+ },
+ {
+  "id": "g35",
+  "block": "Tables",
+  "title": "Country by Outcome",
+  "tech": "crosstab",
+  "prompt": "Print the country × success count table for `df` — countries as rows, success values as columns, counts in the cells.",
+  "starter": "# country x success counts",
+  "expect": "success  False  True \ncountry              \nCA          32     45\nDE          44     72\nFR          35     68\nGB          32     43\nNL          45    102\nUS          25     57",
+  "hint": "A two-way count table is one call.",
+  "walk": [
+   "crosstab(first, second) counts every combination of the two columns.",
+   "Rows are countries, columns are False/True, cells are counts — no groupby chain needed."
+  ],
+  "sol": "print(pd.crosstab(df['country'], df['success']))"
+ },
+ {
+  "id": "g36",
+  "block": "Tables",
+  "title": "The NL Row, With Totals",
+  "tech": "crosstab + margins",
+  "prompt": "Print NL's row of the country × success table for `df`, this time WITH the row total included (margins). One Series: False, True, All.",
+  "starter": "# NL row of the crosstab, with margins",
+  "expect": "success\nFalse     45\nTrue     102\nAll      147\nName: NL, dtype: int64",
+  "hint": "margins adds the All row and column; loc picks your row.",
+  "walk": [
+   "crosstab(..., margins=True) adds totals along both edges.",
+   ".loc['NL'] reads just the NL row — its False count, True count, and the All total."
+  ],
+  "sol": "print(pd.crosstab(df['country'], df['success'], margins=True).loc['NL'])"
+ },
+ {
+  "id": "g37",
+  "block": "Datetime",
+  "title": "Events per Day",
+  "tech": ".dt.date + groupby size",
+  "prompt": "Print how many events in `df` fall on each calendar date — just the first 3 dates. (ts is a timestamp column.)",
+  "starter": "# events per date, first 3",
+  "expect": "ts\n2026-10-20    138\n2026-10-21    205\n2026-10-22    206\ndtype: int64",
+  "hint": "Timestamps speak through the .dt accessor.",
+  "walk": [
+   ".dt.date extracts the calendar date from every timestamp.",
+   "Grouping BY that extracted series and taking size() counts events per date.",
+   "head(3) shows the first three dates in order."
+  ],
+  "sol": "print(df.groupby(df['ts'].dt.date).size().head(3))"
+ },
+ {
+  "id": "g38",
+  "block": "Datetime",
+  "title": "Events per Hour",
+  "tech": ".dt.hour + value_counts + sort_index",
+  "prompt": "Print the number of events in `df` for each hour of the day, in hour order — just the first 3 hours.",
+  "starter": "# events per hour, first 3, in hour order",
+  "expect": "ts\n0    26\n1    25\n2    26\nName: count, dtype: int64",
+  "hint": "Extract the hour, count, then put the hours back in order.",
+  "walk": [
+   ".dt.hour gives each event's hour (0-23).",
+   "value_counts counts per hour but sorts by COUNT — sort_index() re-orders by the hour itself.",
+   "First 3 after re-ordering are the earliest hours, not the busiest."
+  ],
+  "sol": "print(df['ts'].dt.hour.value_counts().sort_index().head(3))"
+ },
+ {
+  "id": "g39",
+  "block": "Datetime",
+  "title": "The Night Shift",
+  "tech": ".dt.hour mask",
+  "prompt": "Print how many events in `df` happened at hour 22 or later (22:00-23:59).",
+  "starter": "# events at hour >= 22",
+  "expect": "52",
+  "hint": "An hour test is a mask like any other.",
+  "walk": [
+   ".dt.hour extracts the hour per event; >= 22 makes the mask.",
+   "Mask + sum counts the night events."
+  ],
+  "sol": "print((df['ts'].dt.hour >= 22).sum())"
+ },
+ {
+  "id": "g40",
+  "block": "Whole records",
+  "title": "Latest per User — the Count",
+  "tech": "sort + drop_duplicates",
+  "prompt": "Build each user's LATEST event in `df` (whole rows) and print how many rows that frame has.",
+  "starter": "# one latest row per user — how many?",
+  "expect": "60",
+  "hint": "Sort by time, then drop keeping last — the record survives whole.",
+  "walk": [
+   "sort_values('ts') puts each user's events in time order.",
+   "drop_duplicates('user_id', keep='last') keeps the final — latest — row per user.",
+   "There are 60 users, so a correct frame has 60 whole records."
+  ],
+  "sol": "latest = df.sort_values('ts').drop_duplicates('user_id', keep='last')\nprint(len(latest))"
+ },
+ {
+  "id": "g41",
+  "block": "Whole records",
+  "title": "Latest per User — the Record",
+  "tech": "drop_duplicates + loc",
+  "prompt": "Print the event_id of user-007's LATEST event in `df`.",
+  "starter": "# user-007's latest event_id",
+  "expect": "evt-00501",
+  "hint": "Same build as before — now read one record out of it.",
+  "walk": [
+   "Build latest exactly as in the count version: sort, drop keep='last'.",
+   "Filter that frame to user-007 and read the event_id — it is a specific, checkable string.",
+   "groupby-max would have handed you a (user, ts) pair — the P4 pairs-instead-of-records trap."
+  ],
+  "sol": "latest = df.sort_values('ts').drop_duplicates('user_id', keep='last')\nprint(latest.loc[latest['user_id'] == 'user-007', 'event_id'].iloc[0])"
+ },
+ {
+  "id": "g42",
+  "block": "Whole records",
+  "title": "Earliest per User",
+  "tech": "keep='first' + formatting",
+  "prompt": "Print the timestamp of user-007's EARLIEST event in `df`, formatted exactly like `2026-10-20 09:24` (date, space, hour:minute).",
+  "starter": "# user-007's earliest ts, dressed",
+  "expect": "2026-10-20 14:04",
+  "hint": "keep='first' on an ascending sort is the earliest — and the timestamp gets an outfit.",
+  "walk": [
+   "Ascending sort + keep='first' keeps each user's first event.",
+   "Pull user-007's ts out of that frame.",
+   "The f-string outfit %Y-%m-%d %H:%M prints exactly the fields named — date and hour:minute, no seconds."
+  ],
+  "sol": "first = df.sort_values('ts').drop_duplicates('user_id', keep='first')\nts = first.loc[first['user_id'] == 'user-007', 'ts'].iloc[0]\nprint(f\"{ts:%Y-%m-%d %H:%M}\")"
+ },
+ {
+  "id": "g43",
+  "block": "The finish",
+  "title": "The Interview Line",
+  "tech": "groupby + agg + dressed print",
+  "prompt": "Find the country in `df` with the highest fail rate. Print exactly one line like `NL — 8,336 — 3,240 — 38.9%`: country, total events (comma-dressed), failed events (comma-dressed), fail rate dressed as a percent.",
+  "starter": "# the interview line for the worst country",
+  "expect": "GB — 75 — 32 — 42.7%",
+  "hint": "The shopping list builds the table; idxmax picks the row; the outfits dress the line.",
+  "walk": [
+   "agg builds total, fails, rate per country in one pass.",
+   "idxmax on the rate column names the worst country.",
+   "Each number gets its outfit: commas for the counts, :.1% for the rate — this is the cells 24-25 line, on new data."
+  ],
+  "sol": "t = df.groupby('country').agg(total=('event_id', 'count'), fails=('is_fail', 'sum'), rate=('is_fail', 'mean'))\nc = t['rate'].idxmax()\nprint(f\"{c} — {t.loc[c, 'total']:,} — {t.loc[c, 'fails']:,} — {t.loc[c, 'rate']:.1%}\")"
+ },
+ {
+  "id": "g44",
+  "block": "The finish",
+  "title": "Dress the Headline",
+  "tech": "formatted percent",
+  "prompt": "Print exactly one line: `Overall fail rate: 36.4%` — with the real rate for `df` in place of the example number, dressed to one decimal.",
+  "starter": "# Overall fail rate: pp.p%",
+  "expect": "Overall fail rate: 35.5%",
+  "hint": "One hole for the number, and the outfit does the dressing.",
+  "walk": [
+   "mean of is_fail is the overall proportion.",
+   "Inside the f-string hole, :.1% turns it into the dressed percent — the label text is literal.",
+   "Proportion in, percent out — the whole wardrobe in one line."
+  ],
+  "sol": "print(f\"Overall fail rate: {df['is_fail'].mean():.1%}\")"
+ },
+ {
+  "id": "g45",
+  "block": "The finish",
+  "title": "Bytes Into Megabytes",
+  "tech": "unit conversion + format",
+  "prompt": "Print the total payload of `df` in megabytes, exactly like `Total payload: 3.2 MB` — total bytes converted, one decimal.",
+  "starter": "# Total payload: X.X MB",
+  "expect": "Total payload: 2.8 MB",
+  "hint": "The outfit will not divide for you — the conversion is yours, the rounding is its.",
+  "walk": [
+   "sum() totals the bytes — a number in the millions.",
+   "Divide by 1_000_000 inside the hole to make it megabytes (cell 03's lesson).",
+   ":.1f rounds the look to one decimal; the label ' MB' is now honest."
+  ],
+  "sol": "print(f\"Total payload: {df['bytes'].sum()/1_000_000:.1f} MB\")"
+ },
+ {
+  "id": "g46",
+  "block": "The finish",
+  "title": "Verdict From Prints",
+  "tech": "print, then claim",
+  "prompt": "Print two lines about `df`. Line 1: the counts, exactly like `3240 of 8336 events failed` (real numbers). Line 2: a verdict sentence that quotes ONLY those printed numbers, exactly like `Verdict: 3240 of 8336 failed (38.9%)` — with the real dressed rate.",
+  "starter": "# line 1: counts; line 2: the verdict quoting them",
+  "expect": "213 of 600 events failed\nVerdict: 213 of 600 failed (35.5%)",
+  "hint": "Print first, claim second — the verdict may only quote what's already on screen.",
+  "walk": [
+   "Compute fails and total and PRINT them before any verdict exists.",
+   "The verdict line reuses those exact variables — it cannot claim a number that was never printed.",
+   "fails/total is a proportion; :.1% dresses it inside the verdict."
+  ],
+  "sol": "fails = int(df['is_fail'].sum())\ntotal = len(df)\nprint(f\"{fails} of {total} events failed\")\nprint(f\"Verdict: {fails} of {total} failed ({fails/total:.1%})\")"
+ },
+ {
+  "id": "g47",
+  "block": "Phrasebook plus",
+  "title": "Flatten the Records",
+  "tech": "json_normalize",
+  "prompt": "`records` is a list of 8 nested dicts (each has a 'user' dict inside). Flatten it and print the value counts of the user tier. Full Series.",
+  "starter": "# tier counts from the flattened records",
+  "expect": "user.tier\npro     3\nfree    3\nteam    2\nName: count, dtype: int64",
+  "hint": "Nested dicts become dotted columns — then it's an ordinary column.",
+  "walk": [
+   "json_normalize unpacks each record's inner 'user' dict into columns like user.tier.",
+   "After flattening, tier is a plain column — value_counts as always.",
+   "This is the cells 37-44 opener, in miniature."
+  ],
+  "sol": "flat = pd.json_normalize(records)\nprint(flat['user.tier'].value_counts())"
+ },
+ {
+  "id": "g48",
+  "block": "Phrasebook plus",
+  "title": "Two-Key Groupby",
+  "tech": "groupby list + size",
+  "prompt": "Print the first 4 entries of the per-(country, success) row counts in `df` — grouping by both keys at once.",
+  "starter": "# counts by (country, success), first 4",
+  "expect": "country  success\nCA       False      32\n         True       45\nDE       False      44\n         True       72\ndtype: int64",
+  "hint": "groupby takes a list when the key has two parts.",
+  "walk": [
+   "groupby(['country', 'success']) forms one group per combination.",
+   "size() counts rows per combination; the result wears a two-level index.",
+   "head(4) shows the first four combinations in key order."
+  ],
+  "sol": "print(df.groupby(['country', 'success']).size().head(4))"
+ },
+ {
+  "id": "g49",
+  "block": "Phrasebook plus",
+  "title": "Dup Audit on a Key",
+  "tech": "duplicated(subset)",
+  "prompt": "In `raw`, print how many rows repeat an event_id that already appeared earlier in the frame.",
+  "starter": "# rows whose event_id already appeared",
+  "expect": "4",
+  "hint": "duplicated takes a subset — judge repeats by the key, not the whole row.",
+  "walk": [
+   "duplicated('event_id') marks a row when its event_id was seen before, whatever the other columns say.",
+   "Whole-row duplicated() (the earlier audit) only catches identical rows; the subset version catches repeated KEYS.",
+   "Mask + sum, as always."
+  ],
+  "sol": "print(raw.duplicated('event_id').sum())"
+ },
+ {
+  "id": "g50",
+  "block": "Capstone",
+  "title": "The Full Table, By Tier",
+  "tech": "merge + agg + dressed lines",
+  "prompt": "Print one line per tier, exactly like `pro — 12,340 — 4,102 — 33.2%` (tier, total events, fails, dressed rate), sorted by fail rate descending. You'll need the merged frame (events + users) and a named agg.",
+  "starter": "# per tier, by rate desc: TIER — TOTAL — FAILS — RATE",
+  "expect": "team — 107 — 42 — 39.3%\npro — 157 — 61 — 38.9%\nfree — 336 — 110 — 32.7%",
+  "hint": "Every move from the list in one problem: join, shopping list, sort, dress.",
+  "walk": [
+   "merge attaches tier to every event.",
+   "agg builds total / fails / rate per tier — rate is mean of the flag.",
+   "reset, sort by rate descending, then dress each line: commas for counts, :.1% for the rate."
+  ],
+  "sol": "m = df.merge(users, on='user_id')\nt = m.groupby('tier').agg(total=('event_id', 'count'), fails=('is_fail', 'sum'), rate=('is_fail', 'mean')).reset_index().sort_values('rate', ascending=False)\nfor _, r in t.iterrows():\n    print(f\"{r['tier']} — {r['total']:,} — {r['fails']:,} — {r['rate']:.1%}\")"
+ }
+];
+if (typeof module !== 'undefined' && module.exports) module.exports = {GYM_SETUP, GYM_EXERCISES};
 
 </script>
 <script>
@@ -5454,7 +6269,7 @@ var storageOK = true;
 function lsGet(){ try { return localStorage.getItem(KEY); } catch (e){ storageOK = false; return null; } }
 function lsSet(v){ try { localStorage.setItem(KEY, v); } catch (e){ storageOK = false; } }
 function defaultState(){
-  return {v: 2, xp: {drills: 0, sql: 0, fundamentals: 0, rapid: 0, java: 0}, done: {drills: {}, sql: {}, fundamentals: {}, javaQ: {}}, rapid: {plays: {}, best: {}}, mistakes: [], streak: {last: '', count: 0}, helped: {}, tagStats: {}};
+  return {v: 2, xp: {drills: 0, sql: 0, fundamentals: 0, rapid: 0, java: 0, gym: 0}, done: {drills: {}, sql: {}, fundamentals: {}, javaQ: {}}, rapid: {plays: {}, best: {}}, gym: {done: {}, helped: {}}, mistakes: [], streak: {last: '', count: 0}, helped: {}, tagStats: {}};
 }
 function migrate(s){
   if (!s) return defaultState();
@@ -5466,6 +6281,7 @@ function migrate(s){
     d.mistakes = s.mistakes || []; d.streak = s.streak || d.streak;
     d.helped = (s.helped && typeof s.helped === 'object') ? s.helped : {};
     d.tagStats = (s.tagStats && typeof s.tagStats === 'object') ? s.tagStats : {};
+    if (s.gym && typeof s.gym === 'object') d.gym = {done: s.gym.done || {}, helped: s.gym.helped || {}};
     return d;
   }
   if (s.v === 1){ // v1 dual-track save: keep Python fundamentals, drop Java
@@ -5655,6 +6471,12 @@ function render(){
   else if (S.screen === 'rapid') app.innerHTML = viewRapid();
   else if (S.screen === 'jchapter') app.innerHTML = viewJavaChapter();
   else if (S.screen === 'jquestion') app.innerHTML = viewJavaQuestion();
+  else if (S.screen === 'gym') app.innerHTML = viewGymList();
+  else if (S.screen === 'gymEx') app.innerHTML = viewGymEx();
+  if (S.screen === 'gymEx'){
+    var gta = document.getElementById('gymEditor');
+    if (gta && S.gymCode !== null && S.gymCode !== undefined) gta.value = S.gymCode;
+  }
   if (S.screen === 'jquestion'){
     var jta = document.getElementById('editor');
     if (jta && S.qCode !== null && S.qCode !== undefined) jta.value = S.qCode;
@@ -5680,7 +6502,7 @@ function render(){
 }
 function headerHtml(){
   return '<div class="topbar"><div class="logo">🥋 Code<span>Dojo</span></div>' +
-    '<div class="stats"><div class="stat">⭐ ' + (state.xp.drills + state.xp.sql + state.xp.fundamentals + state.xp.rapid + state.xp.java) + ' XP</div>' +
+    '<div class="stats"><div class="stat">⭐ ' + (state.xp.drills + state.xp.sql + state.xp.fundamentals + state.xp.rapid + state.xp.java + state.xp.gym) + ' XP</div>' +
     '<div class="stat">🔥 ' + state.streak.count + '</div></div></div>';
 }
 function sectionHtml(coll){
@@ -5717,6 +6539,10 @@ var GROCERY_DECK_IDS = ['rapid-phrasebook', 'rapid-finish', 'rapid-traps'];
 function grocerySectionHtml(){
   var h = '<div class="unithead">\uD83E\uDDFA Tonight \u2014 The Grocery List</div>' +
     '<p class="note" style="margin:-4px 2px 10px">Built from your graded misses in the Pandas 50 (cells 1\u201324): every card in these decks is a miss you actually made, drilled back at you. Interview is tomorrow, 8:30 AM \u2014 this is the hammering section.</p>';
+  h += '<div class="card" style="border:2px solid #0ea5e9"><h3 style="margin-top:0">🏋️ Pandas Gym — 50 coding reps</h3>' +
+    '<p style="margin:4px 0">The decks below test recognition. The Gym tests the real thing: <b>write pandas, run it in a real Python runtime, get checked line by line</b> — 50 exercises, each a different technique, none of them your notebook cells verbatim. No timer.</p>' +
+    '<p style="margin:4px 0"><b>' + gymDoneCount() + ' / 50 banked</b>' + (Object.keys(state.gym.helped).length ? ' · ' + Object.keys(state.gym.helped).length + ' with help (❄️ cold list)' : '') + '</p>' +
+    '<button class="btn" onclick="H.gymList()">Open the Gym →</button></div>';
   h += '<div class="card"><h3 style="margin-top:0">\uD83D\uDEAA The Finish Gate \u2014 out loud, before every next cell</h3>' +
     '<p style="margin:4px 0"><b>1. UNITS</b> \u2014 is it dressed? (% not proportion, MB not bytes)<br>' +
     '<b>2. SHAPE</b> \u2014 rows/cols/type exactly what the prompt named?<br>' +
@@ -6060,7 +6886,7 @@ function viewBuild(L){
 }
 function viewDone(L){
   var ls = lessonsOf(S.coll); var idx = ls.indexOf(L);
-  var earnedNow = (state.xp.drills + state.xp.sql + state.xp.fundamentals + state.xp.rapid + state.xp.java) - (S.xpAtStart || 0);
+  var earnedNow = (state.xp.drills + state.xp.sql + state.xp.fundamentals + state.xp.rapid + state.xp.java + state.xp.gym) - (S.xpAtStart || 0);
   var h = '<div class="card center"><div class="bigemoji">🎉</div><h2>Lesson complete!</h2>' +
     '<p>' + (earnedNow > 0 ? 'You earned ' + earnedNow + ' XP' : 'Already banked — no new XP for a redo') + ' in <b>' + escHtml(COLLECTIONS[S.coll].title) + '</b> for <b>' + escHtml(L.title) + '</b> — in ' + elapsedStr() + (L.target ? ' (target ' + L.target + ')' : '') + '.</p>' +
     (state.helped[S.coll + ':' + L.id] ? '<p class="note">📖 This Build was finished after a solution study, so it is queued as a ❄️ cold recheck for tomorrow. Passing it cold — no peeking — is what banks it.</p>' : '');
@@ -6317,10 +7143,193 @@ function viewRapid(){
   return h + '</div>';
 }
 
+
+/* ---------- Pandas Gym: write-and-execute pandas (Pyodide runtime) ---------- */
+var PY_CDN = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/';
+var pyInst = null, pyPromise = null, pyError = null;
+function gymEx(id){ for (var i = 0; i < GYM_EXERCISES.length; i++) if (GYM_EXERCISES[i].id === id) return GYM_EXERCISES[i]; return null; }
+function gymDoneCount(){ return Object.keys(state.gym.done).length; }
+function gymSetStatus(msg){ var el = document.getElementById('pyStatus'); if (el) el.textContent = msg; }
+function ensurePy(){
+  if (pyInst) return Promise.resolve(pyInst);
+  if (pyPromise) return pyPromise;
+  pyPromise = new Promise(function(resolve, reject){
+    function fail(e){ pyError = (e && e.message) || String(e); pyPromise = null; reject(e); }
+    gymSetStatus('🐍 Loading the Python runtime…');
+    var sc = document.createElement('script');
+    sc.src = PY_CDN + 'pyodide.js';
+    sc.onerror = function(){ fail(new Error('the runtime script could not be fetched — are you online?')); };
+    sc.onload = function(){
+      loadPyodide({indexURL: PY_CDN}).then(function(py){
+        gymSetStatus('🐍 Downloading pandas… (one-time, ~20 MB)');
+        py.loadPackage(['pandas']).then(function(){ pyInst = py; gymSetStatus('🐍 Python runtime ready.'); resolve(py); }, fail);
+      }, fail);
+    };
+    document.head.appendChild(sc);
+  });
+  return pyPromise;
+}
+function gymRunCode(code){
+  return ensurePy().then(function(py){
+    var out = [];
+    py.setStdout({batched: function(s){ out.push(s); }});
+    py.setStderr({batched: function(s){ out.push(s); }});
+    try {
+      py.runPython(GYM_SETUP);
+      py.runPython(code);
+      return {ok: true, lines: out};
+    } catch (e) {
+      var msg = String((e && e.message) || e);
+      var parts = msg.split('\n').filter(function(x){ return x.trim(); });
+      return {ok: false, lines: out, error: parts.length ? parts[parts.length - 1] : msg};
+    }
+  });
+}
+function gymNorm(lines){
+  var a = lines.map(function(l){ return String(l).replace(/\s+$/, ''); });
+  while (a.length && a[a.length - 1] === '') a.pop();
+  return a;
+}
+function gymTokenEq(a, b){
+  if (a === b) return true;
+  if (!/^-?\d+(\.\d+)?%?$/.test(a) || !/^-?\d+(\.\d+)?%?$/.test(b)) return false;
+  var na = parseFloat(a), nb = parseFloat(b);
+  return Math.abs(na - nb) <= 0.0011 * Math.max(1, Math.abs(nb));
+}
+function gymLineEq(a, b){
+  if (a === b) return true;
+  var ta = a.split(/\s+/), tb = b.split(/\s+/);
+  if (ta.length !== tb.length) return false;
+  for (var i = 0; i < ta.length; i++) if (!gymTokenEq(ta[i], tb[i])) return false;
+  return true;
+}
+function gymCheck(gotLines, expectStr){
+  var got = gymNorm(gotLines), exp = gymNorm(expectStr.split('\n'));
+  var n = Math.max(got.length, exp.length);
+  for (var i = 0; i < n; i++){
+    if (i >= got.length) return {pass: false, at: i, exp: exp[i], got: '(nothing — your output ended here)'};
+    if (i >= exp.length) return {pass: false, at: i, exp: '(nothing — the expected output ended here)', got: got[i]};
+    if (!gymLineEq(got[i], exp[i])) return {pass: false, at: i, exp: exp[i], got: got[i]};
+  }
+  return {pass: true};
+}
+function viewGymList(){
+  var h = '<button class="backbtn" onclick="H.home()">← All tracks</button>';
+  h += '<h2 style="margin:2px 0 4px">🏋️ Pandas Gym — 50 coding reps</h2>';
+  h += '<p class="note">Write real pandas, run it in a real Python runtime inside your browser, and get checked line by line. No timer, ever. The first run downloads the runtime once (~20 MB — needs internet); after that your browser caches it.</p>';
+  h += '<div class="card"><b>' + gymDoneCount() + ' / 50 banked</b>' +
+    (Object.keys(state.gym.helped).length ? ' · ' + Object.keys(state.gym.helped).length + ' with help (❄️ — the cold version is the notebook retest)' : '') +
+    '<div class="note" id="pyStatus" style="margin:6px 0 0">' + (pyError ? '⚠️ Runtime failed to load: ' + escHtml(pyError) : (pyInst ? '🐍 Python runtime ready.' : '🐍 The runtime loads on your first run or peek.')) + '</div></div>';
+  var blocks = [], byBlock = {};
+  GYM_EXERCISES.forEach(function(ex){ if (!byBlock[ex.block]){ byBlock[ex.block] = []; blocks.push(ex.block); } byBlock[ex.block].push(ex); });
+  blocks.forEach(function(b){
+    h += '<div class="unithead" style="margin-top:16px">' + escHtml(b) + '</div><div class="cards">';
+    byBlock[b].forEach(function(ex){
+      var i = GYM_EXERCISES.indexOf(ex);
+      var done = !!state.gym.done[ex.id], helped = !!state.gym.helped[ex.id];
+      h += '<button class="qrow" onclick="H.gymOpen(\'' + ex.id + '\')">' +
+        '<div class="qn">' + (i + 1) + '</div><div class="qt"><div>' + escHtml(ex.title) + '</div>' +
+        '<div class="s">' + escHtml(ex.tech) + '</div></div>' +
+        '<div class="dots">' + (done ? (helped ? '❄️ helped' : '✅') : '▶') + '</div></button>';
+    });
+    h += '</div>';
+  });
+  return h;
+}
+function viewGymEx(){
+  var ex = gymEx(S.gymId); var idx = GYM_EXERCISES.indexOf(ex);
+  var h = '<button class="backbtn" onclick="H.gymList()">← Pandas Gym</button>';
+  h += '<div class="note">Exercise ' + (idx + 1) + ' of 50 · ' + escHtml(ex.block) + ' · ' + escHtml(ex.tech) + (state.gym.done[ex.id] ? ' · ✅ banked' + (state.gym.helped[ex.id] ? ' (with help)' : '') : '') + '</div>';
+  h += '<h2 style="margin:2px 0 6px">' + escHtml(ex.title) + '</h2>';
+  h += '<div class="card"><p style="margin-top:0">' + escHtml(ex.prompt) + '</p>' +
+    '<p class="note" style="margin-bottom:0">In scope: <b>df</b> — 600 deduped auth events (event_id, user_id, country, success, reason, bytes, ts, is_fail, email) · <b>raw</b> — the same 600 plus 4 exact duplicate rows · <b>users</b> — 60 rows (user_id, tier, home_country) · <b>records</b> — 8 nested dicts. pandas is imported as pd, numpy as np.</p></div>';
+  if (pyError) h += '<div class="warn">⚠️ The Python runtime could not load (' + escHtml(pyError) + '). You can still write your code below and self-check against the expected output.</div>';
+  else h += '<div class="note" id="pyStatus">' + (pyInst ? '🐍 Python runtime ready.' : '🐍 The runtime loads on your first run or peek (one-time download).') + '</div>';
+  h += '<div style="margin:8px 0"><button class="btn secondary" onclick="H.gymPeek(\'df\')">📊 Peek df</button> <button class="btn secondary" onclick="H.gymPeek(\'users\')">📊 Peek users</button> <button class="btn secondary" onclick="H.gymPeek(\'raw\')">📊 Peek raw</button></div>';
+  h += '<textarea id="gymEditor" class="editor" rows="9" spellcheck="false" oninput="H.gymType(this.value)">' + escHtml(ex.starter) + '</textarea>';
+  h += '<button class="btn" onclick="H.gymRun()">' + (S.gymRunning ? '⏳ Running…' : '▶ Run & check') + '</button>';
+  if (S.gymOut){
+    h += '<div class="code-label" style="margin-top:10px">Your output</div><div class="outbox">' + escHtml(S.gymOut.join('\n') || '(nothing printed)') + (S.gymErr ? '\n💥 ' + escHtml(S.gymErr) : '') + '</div>';
+  }
+  if (S.gymChecked === 'pass'){
+    h += feedbackHtml(true, S.gymHelpedNow ? 'Banked — with help. That still counts; the cold version of this technique lives on the notebook retest list.' : 'Output matches, line for line. Banked.');
+    if (idx + 1 < GYM_EXERCISES.length) h += '<button class="btn" onclick="H.gymOpen(\'' + GYM_EXERCISES[idx + 1].id + '\')">Next exercise →</button>';
+    else h += '<p class="note">That is all 50. 🏆</p>';
+  } else if (S.gymChecked === 'fail'){
+    var d = S.gymDiv;
+    h += '<div style="background:#fef2f2;border:2px solid #ef4444;border-radius:12px;padding:12px 14px;margin:10px 0"><b>📍 Where you are vs where you\'re going</b>' +
+      '<p style="margin:6px 0">First difference at output line ' + (d.at + 1) + ':</p>' +
+      '<div class="code-label">Expected</div>' + codeBlock(d.exp) +
+      '<div class="code-label">You printed</div>' + codeBlock(d.got) + '</div>';
+    h += '<div style="margin:6px 0">';
+    if (!S.gymShowHint) h += '<button class="btn secondary" onclick="H.gymHint()">💡 Hint</button> ';
+    if (S.gymFails >= 2 && !S.gymShowWalk) h += '<button class="btn secondary" onclick="H.gymWalk()">🧭 Walk me through it</button> ';
+    if (S.gymFails >= 3 && !S.gymShowSol) h += '<button class="btn secondary" onclick="H.gymSol()">📖 Study the solution</button>';
+    h += '</div>';
+    if (S.gymShowHint) h += '<div class="card"><b>💡 Hint</b><p style="margin:4px 0">' + escHtml(ex.hint) + '</p></div>';
+    if (S.gymShowWalk) h += '<div style="background:#fffbeb;border:2px solid #f59e0b;border-radius:12px;padding:12px 14px;margin:10px 0"><b>🧭 Step by step</b><ol style="margin:8px 0 2px;padding-left:20px">' + ex.walk.map(function(w){ return '<li style="margin-bottom:6px">' + escHtml(w) + '</li>'; }).join('') + '</ol></div>';
+    if (S.gymShowSol) h += '<div class="card"><b>📖 One way that works</b>' + codeBlock(ex.sol) + '<p class="note" style="margin-bottom:0">Now close this, clear the editor, and rebuild it unaided — passing after studying banks it as helped (❄️).</p></div>';
+  }
+  if (pyError){
+    h += '<div style="margin-top:10px"><button class="btn secondary" onclick="H.gymReveal()">👀 Reveal expected output (self-check)</button></div>';
+    if (S.gymRevealed) h += '<div class="code-label" style="margin-top:8px">Expected output</div>' + codeBlock(ex.expect);
+  }
+  return h;
+}
+
 /* ---------- handlers ---------- */
 window.H = {
   home: goHome,
   review: function(){ stopTimer(); S = {screen: 'review'}; render(); window.scrollTo(0, 0); },
+  gymList: function(){ stopTimer(); S = {screen: 'gym'}; render(); window.scrollTo(0, 0); },
+  gymOpen: function(id){
+    stopTimer();
+    S = {screen: 'gymEx', gymId: id, gymCode: null, gymOut: null, gymErr: null, gymChecked: null, gymDiv: null, gymFails: 0, gymShowHint: false, gymShowWalk: false, gymShowSol: false, gymRunning: false, gymRevealed: false, gymHelpedNow: false};
+    render(); window.scrollTo(0, 0);
+  },
+  gymType: function(v){ S.gymCode = v; },
+  gymRun: function(){
+    var ta = document.getElementById('gymEditor'); if (ta) S.gymCode = ta.value;
+    var ex = gymEx(S.gymId); var code = (S.gymCode && S.gymCode.trim()) ? S.gymCode : ex.starter;
+    S.gymRunning = true; S.gymChecked = null; render();
+    gymRunCode(code).then(function(res){
+      S.gymRunning = false; S.gymOut = res.lines; S.gymErr = res.ok ? null : res.error;
+      if (!res.ok){
+        S.gymChecked = 'fail'; S.gymFails++;
+        S.gymDiv = {at: res.lines.length, exp: '(code that runs without an error)', got: '💥 ' + res.error};
+      } else {
+        var chk = gymCheck(res.lines, ex.expect);
+        if (chk.pass){
+          var first = !state.gym.done[ex.id];
+          var helped = !!(S.gymShowSol || S.gymShowWalk);
+          state.gym.done[ex.id] = true;
+          if (helped && first) state.gym.helped[ex.id] = true;
+          if (first) state.xp.gym += helped ? 5 : 10;
+          S.gymHelpedNow = helped; S.gymChecked = 'pass'; save();
+        } else { S.gymChecked = 'fail'; S.gymFails++; S.gymDiv = chk; }
+      }
+      render();
+    }).catch(function(e){
+      S.gymRunning = false; S.gymOut = []; S.gymErr = String((e && e.message) || e); S.gymChecked = null; render();
+    });
+  },
+  gymPeek: function(which){
+    var snippets = {
+      df: "print(df.head(4).to_string())",
+      users: "print(users.head(6).to_string())",
+      raw: "print(raw.head(4).to_string())\nprint('rows:', len(raw))"
+    };
+    S.gymRunning = true; render();
+    gymRunCode(snippets[which]).then(function(res){
+      S.gymRunning = false; S.gymOut = res.lines; S.gymErr = res.ok ? null : res.error; render();
+    }).catch(function(e){
+      S.gymRunning = false; S.gymOut = []; S.gymErr = String((e && e.message) || e); render();
+    });
+  },
+  gymHint: function(){ S.gymShowHint = true; render(); },
+  gymWalk: function(){ S.gymShowWalk = true; render(); },
+  gymSol: function(){ S.gymShowSol = true; render(); },
+  gymReveal: function(){ S.gymRevealed = true; render(); },
   open: function(coll, id){ openLesson(coll, id, null); },
   openFromReview: function(coll, id, kind){
     if (coll === 'rapid'){ H.rapidStart(id); return; }
